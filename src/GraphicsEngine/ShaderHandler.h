@@ -185,9 +185,9 @@ public:
 	void SetCameraWorldMatrix(XMMATRIX& camWorldMatrix);
 	void SetLightWorldViewProj(XMMATRIX& lightWorld, XMMATRIX& lightView, XMMATRIX& lightProj);
 
-	void SetPLights(ID3D11DeviceContext* dc, UINT numPLights, PointLight PLights[]);
-	void SetDirLights(ID3D11DeviceContext* dc, UINT numDirLights, DirLight dirLights[]);
-	void SetSLights(ID3D11DeviceContext* dc, UINT numSLights, SpotLight SLights[]);
+	void SetPointLights(ID3D11DeviceContext* dc, UINT numPointLights, PointLight* pointLights[]);
+	void SetDirLights(ID3D11DeviceContext* dc, UINT numDirLights, DirLight* dirLights[]);
+	void SetSpotLights(ID3D11DeviceContext* dc, UINT numSpotLights, SpotLight* spotLights[]);
 
 	void SetMaterials(ID3D11DeviceContext* dc, UINT numMaterials, Material* mats[]);
 
@@ -227,9 +227,9 @@ private:
 
 	struct PS_CPERFRAMEBUFFER
 	{
-		PointLight PLights[MAX_POINT_LIGHTS];
+		PointLight pointLights[MAX_POINT_LIGHTS];
 		DirLight dirLights[MAX_DIR_LIGHTS];
-		SpotLight SLights[MAX_SPOT_LIGHTS];
+		SpotLight spotLights[MAX_SPOT_LIGHTS];
 
 		UINT numPLights;
 		UINT numDirLights;

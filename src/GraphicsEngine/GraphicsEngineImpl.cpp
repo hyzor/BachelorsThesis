@@ -7,9 +7,9 @@
 
 GraphicsEngineImpl::GraphicsEngineImpl()
 {
-	mPointLights = new PointLight[MAX_POINT_LIGHTS];
-	mDirLights = new DirLight[MAX_DIR_LIGHTS];
-	mSpotLights = new SpotLight[MAX_SPOT_LIGHTS];
+	//mPointLights = new PointLight[MAX_POINT_LIGHTS];
+	//mDirLights = new DirLight[MAX_DIR_LIGHTS];
+	//mSpotLights = new SpotLight[MAX_SPOT_LIGHTS];
 
 	mPointLightsCount = 0;
 	mDirLightsCount = 0;
@@ -19,10 +19,13 @@ GraphicsEngineImpl::GraphicsEngineImpl()
 GraphicsEngineImpl::~GraphicsEngineImpl()
 {
 	mMaterials.clear();
+	mPointLights.clear();
+	mDirLights.clear();
+	mSpotLights.clear();
 
-	delete[] mPointLights;
-	delete[] mDirLights;
-	delete[] mSpotLights;
+	//delete[] mPointLights;
+	//delete[] mDirLights;
+	//delete[] mSpotLights;
 
 	delete mSky;
 	delete mCamera;
@@ -289,9 +292,9 @@ void GraphicsEngineImpl::RenderSceneToTexture()
 	//---------------------------------------------------------------------------------------
 	mShaderHandler->mLightDeferredToTextureShader->SetActive(mD3D->GetImmediateContext());
 	mShaderHandler->mLightDeferredToTextureShader->SetEyePosW(mCamera->GetPosition());
-	mShaderHandler->mLightDeferredToTextureShader->SetPLights(mD3D->GetImmediateContext(), (UINT)mPointLightsCount, mPointLights);
-	mShaderHandler->mLightDeferredToTextureShader->SetDirLights(mD3D->GetImmediateContext(), (UINT)mDirLightsCount, mDirLights);
-	mShaderHandler->mLightDeferredToTextureShader->SetSLights(mD3D->GetImmediateContext(), (UINT)mSpotLightsCount, mSpotLights);
+	mShaderHandler->mLightDeferredToTextureShader->SetPointLights(mD3D->GetImmediateContext(), (UINT)mPointLights.size(), mPointLights.data());
+	mShaderHandler->mLightDeferredToTextureShader->SetDirLights(mD3D->GetImmediateContext(), (UINT)mDirLights.size(), mDirLights.data());
+	mShaderHandler->mLightDeferredToTextureShader->SetSpotLights(mD3D->GetImmediateContext(), (UINT)mSpotLights.size(), mSpotLights.data());
 	//mShaderHandler->mLightDeferredToTextureShader->SetShadowTransform(mShadowMap->GetShadowTransform());
 	mShaderHandler->mLightDeferredToTextureShader->SetCameraViewProjMatrix(mCamera->GetViewMatrix(), mCamera->GetProjMatrix());
 	//mShaderHandler->mLightDeferredToTextureShader->SetLightWorldViewProj(mShadowMap->GetLightWorld(), mShadowMap->GetLightView(), mShadowMap->GetLightProj());
@@ -320,9 +323,9 @@ void GraphicsEngineImpl::RenderSceneToTexture()
 	mD3D->GetImmediateContext()->OMSetDepthStencilState(RenderStates::mDepthDisabledStencilUseDSS, 0); // Draw using stencil values of 0 (this is the sky)
 
 	// We don't want any light to affect the sky, set these "num values" to 0
-	mShaderHandler->mLightDeferredToTextureShader->SetPLights(mD3D->GetImmediateContext(), 0, mPointLights);
-	mShaderHandler->mLightDeferredToTextureShader->SetDirLights(mD3D->GetImmediateContext(), 0, mDirLights);
-	mShaderHandler->mLightDeferredToTextureShader->SetSLights(mD3D->GetImmediateContext(), 0, mSpotLights);
+	mShaderHandler->mLightDeferredToTextureShader->SetPointLights(mD3D->GetImmediateContext(), 0, mPointLights.data());
+	mShaderHandler->mLightDeferredToTextureShader->SetDirLights(mD3D->GetImmediateContext(), 0, mDirLights.data());
+	mShaderHandler->mLightDeferredToTextureShader->SetSpotLights(mD3D->GetImmediateContext(), 0, mSpotLights.data());
 	mShaderHandler->mLightDeferredToTextureShader->SetSkipLighting(true);
 
 	mShaderHandler->mLightDeferredToTextureShader->UpdatePerFrame(mD3D->GetImmediateContext());

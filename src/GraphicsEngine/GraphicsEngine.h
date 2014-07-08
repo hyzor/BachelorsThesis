@@ -1,8 +1,7 @@
 #ifndef GRAPHICS_GRAPHICSENGINE_H_
 #define GRAPHICS_GRAPHICSENGINE_H_
 
-#include "Direct3D.h"
-#include "DirectXUtil.h"
+#include <DirectXMath.h>
 
 #include <string>
 #include "common/platform.h"
@@ -35,7 +34,7 @@ public:
 	virtual void SetSkyTexture(const std::string& fileName) = 0;
 
 	// Text
-	virtual void PrintText(std::string text, int x, int y, XMFLOAT3 RGB, float scale, float alpha) = 0;
+	virtual void PrintText(std::string text, int x, int y, DirectX::XMFLOAT3 RGB, float scale, float alpha) = 0;
 };
 
 DLL_API GraphicsEngine* CreateGraphicsEngine();

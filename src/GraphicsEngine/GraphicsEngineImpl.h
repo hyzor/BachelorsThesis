@@ -62,10 +62,6 @@ private:
 	Camera* mCamera;
 	InputLayouts* mInputLayouts;
 
-	PointLight* mPointLights;
-	DirLight* mDirLights;
-	SpotLight* mSpotLights;
-
 	int mPointLightsCount;
 	int mDirLightsCount;
 	int mSpotLightsCount;
@@ -73,6 +69,9 @@ private:
 	Sky* mSky;
 
 	std::vector<Material*> mMaterials;
+	std::vector<PointLight*> mPointLights;
+	std::vector<DirLight*> mDirLights;
+	std::vector<SpotLight*> mSpotLights;
 
 	ShaderHandler* mShaderHandler;
 

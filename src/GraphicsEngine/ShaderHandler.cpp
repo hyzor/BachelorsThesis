@@ -427,28 +427,36 @@ bool LightDeferredShader::BindShaders(ID3D11VertexShader* vShader, ID3D11PixelSh
 	return true;
 }
 
-void LightDeferredShader::SetPLights(ID3D11DeviceContext* dc, UINT numPLights, PointLight PLights[])
+void LightDeferredShader::SetPointLights(ID3D11DeviceContext* dc, UINT numPointLights, PointLight* PLights[])
 {
-	mBufferCache.psPerFrameBuffer.numPLights = numPLights;
+	mBufferCache.psPerFrameBuffer.numPLights = numPointLights;
 
-	for (UINT i = 0; i < numPLights; ++i)
-		mBufferCache.psPerFrameBuffer.PLights[i] = PLights[i];
+	for (UINT i = 0; i < numPointLights; ++i)
+		mBufferCache.psPerFrameBuffer.pointLights[i] = *PLights[i];
 }
 
-void LightDeferredShader::SetDirLights(ID3D11DeviceContext* dc, UINT numDirLights, DirLight dirLights[])
+void LightDeferredShader::SetDirLights(ID3D11DeviceContext* dc, UINT numDirLights, DirLight* dirLights[])
 {
 	mBufferCache.psPerFrameBuffer.numDirLights = numDirLights;
 
 	for (UINT i = 0; i < numDirLights; ++i)
-		mBufferCache.psPerFrameBuffer.dirLights[i] = dirLights[i];
+		mBufferCache.psPerFrameBuffer.dirLights[i] = *dirLights[i];
 }
 
-void LightDeferredShader::SetSLights(ID3D11DeviceContext* dc, UINT numSLights, SpotLight SLights[])
+void LightDeferredShader::SetSpotLights(ID3D11DeviceContext* dc, UINT numSpotLights, SpotLight* SLights[])
 {
-	mBufferCache.psPerFrameBuffer.numSLights = numSLights;
+	mBufferCache.psPerFrameBuffer.numSLights = numSpotLights;
 
-	for (UINT i = 0; i < numSLights; ++i)
-		mBufferCache.psPerFrameBuffer.SLights[i] = SLights[i];
+	for (UINT i = 0; i < numSpotLights; ++i)
+		mBufferCache.psPerFrameBuffer.spotLights[i] = *SLights[i];
+}
+
+void LightDeferredShader::SetMaterials(ID3D11DeviceContext* dc, UINT numMaterials, Material* mats[])
+{
+	for (UINT i = 0; i < numMaterials; ++i)
+	{
+		mBufferCache.psPerFrameBuffer.materials[i] = *mats[i];
+	}
 }
 
 LightDeferredShader::LightDeferredShader()
@@ -674,14 +682,6 @@ void LightDeferredShader::SetSkipLighting(bool skipLighting)
 void LightDeferredShader::SetIsTransparencyPass(bool isTransparencyPass)
 {
 	mBufferCache.psPerFrameBuffer.isTransparencyPass = isTransparencyPass;
-}
-
-void LightDeferredShader::SetMaterials(ID3D11DeviceContext* dc, UINT numMaterials, Material* mats[])
-{
-	for (UINT i = 0; i < numMaterials; ++i)
-	{
-		mBufferCache.psPerFrameBuffer.materials[i] = *mats[i];
-	}
 }
 
 SkyDeferredShader::SkyDeferredShader()
