@@ -21,7 +21,7 @@ public:
 	Sky(ID3D11Device* device, TextureManager *textureManager, float skySphereRadius);
 	~Sky(void);
 
-	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> cubeMapSRV();
+	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> GetCubeMapSRV();
 
 	void Draw(ID3D11DeviceContext* dc, const Camera& cam, SkyDeferredShader* skyShader);
 

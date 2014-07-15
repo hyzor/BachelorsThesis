@@ -7,10 +7,10 @@ using namespace Microsoft::WRL;
 
 Direct3D::Direct3D(void)
 {
-	md3dDriverType = D3D_DRIVER_TYPE_HARDWARE;
+	mD3dDriverType = D3D_DRIVER_TYPE_HARDWARE;
 
-	md3dDevice = nullptr;
-	md3dImmediateContext = nullptr;
+	mD3dDevice = nullptr;
+	mD3dImmediateContext = nullptr;
 	mSwapChain = nullptr;
 	mDepthStencilBuffer = nullptr;
 	mRenderTargetView = nullptr;
@@ -55,7 +55,7 @@ bool Direct3D::Init(HWND* mainWindow, UINT width, UINT height)
 	ComPtr<ID3D11DeviceContext> deviceContext;
 	hr = D3D11CreateDevice(
 		nullptr,						// Display adapter (Default)
-		md3dDriverType,			// Driver type (For 3D HW Acceleration)
+		mD3dDriverType,			// Driver type (For 3D HW Acceleration)
 		nullptr,						// Software driver (No software device)
 		createDeviceFlags,		// Flags (i.e. Debug, Single thread)
 		featureLevels,						// Feature level (Check what version of D3D is supported)
@@ -65,8 +65,8 @@ bool Direct3D::Init(HWND* mainWindow, UINT width, UINT height)
 		&featureLevel,			// Returns feature level
 		&deviceContext); // Return created device context
 
-	hr = device.As(&md3dDevice);
-	hr = deviceContext.As(&md3dImmediateContext);
+	hr = device.As(&mD3dDevice);
+	hr = deviceContext.As(&mD3dImmediateContext);
 
 	if (FAILED(hr))
 	{
@@ -81,7 +81,7 @@ bool Direct3D::Init(HWND* mainWindow, UINT width, UINT height)
 	}
 
 	// Check if 4x MSAA quality is supported
-	hr  = md3dDevice->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &m4xMSAAQuality);
+	hr  = mD3dDevice->CheckMultisampleQualityLevels(DXGI_FORMAT_R8G8B8A8_UNORM, 4, &m4xMSAAQuality);
 	assert(m4xMSAAQuality > 0);
 
 	// Instance used for describing the swap chain
@@ -107,7 +107,7 @@ bool Direct3D::Init(HWND* mainWindow, UINT width, UINT height)
 
 	// We have to find and use the same IDXGIFactory that was used to create the device before
 	ComPtr<IDXGIDevice1> dxgiDevice;
-	hr = md3dDevice.As(&dxgiDevice);
+	hr = mD3dDevice.As(&dxgiDevice);
 
 	ComPtr<IDXGIAdapter> dxgiAdapter;
 	hr = dxgiDevice->GetAdapter(&dxgiAdapter);
@@ -135,7 +135,7 @@ bool Direct3D::Init(HWND* mainWindow, UINT width, UINT height)
 
 	// Now create the swap chain with the IDXGIFactory we found
 	//hr = dxgiFactory->CreateSwapChainForHwnd(md3dDevice.Get(), *mainWindow, &swapChainDesc, NULL, NULL, &mSwapChain);
-	hr = dxgiFactory->CreateSwapChain(md3dDevice.Get(), &sd, mSwapChain.GetAddressOf());
+	hr = dxgiFactory->CreateSwapChain(mD3dDevice.Get(), &sd, mSwapChain.GetAddressOf());
 
 	// Release temporary COM objects
 	dxgiDevice = nullptr;
@@ -156,8 +156,8 @@ void Direct3D::OnResize(UINT width, UINT height)
 {
 	HRESULT hr;
 
-	assert(md3dImmediateContext);
-	assert(md3dDevice);
+	assert(mD3dImmediateContext);
+	assert(mD3dDevice);
 	assert(mSwapChain);
 
 	// Release old views because they hold references to buffers we will be destroying
@@ -173,7 +173,7 @@ void Direct3D::OnResize(UINT width, UINT height)
 	// Recreate render target view
 	ComPtr<ID3D11Texture2D> backBuffer;
 	hr = mSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), &backBuffer);
-	md3dDevice->CreateRenderTargetView(backBuffer.Get(), nullptr, &mRenderTargetView);
+	mD3dDevice->CreateRenderTargetView(backBuffer.Get(), nullptr, &mRenderTargetView);
 
 	// Create the depth/stencil buffer and view
 	D3D11_TEXTURE2D_DESC depthStencilDesc;
@@ -201,7 +201,7 @@ void Direct3D::OnResize(UINT width, UINT height)
 	depthStencilDesc.CPUAccessFlags = 0;					// Specify CPU access (Only GPU writes/reads to the depth/buffer)
 	depthStencilDesc.MiscFlags = 0;							// Optional flags
 
-	hr = md3dDevice->CreateTexture2D(&depthStencilDesc, 0, &mDepthStencilBuffer);
+	hr = mD3dDevice->CreateTexture2D(&depthStencilDesc, 0, &mDepthStencilBuffer);
 
 	D3D11_DEPTH_STENCIL_VIEW_DESC depthStencilViewDesc;
 	memset(&depthStencilViewDesc, 0, sizeof(D3D11_DEPTH_STENCIL_VIEW_DESC));
@@ -209,7 +209,7 @@ void Direct3D::OnResize(UINT width, UINT height)
 	depthStencilViewDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
 	depthStencilViewDesc.Texture2D.MipSlice = 0;
 
-	hr = md3dDevice->CreateDepthStencilView(mDepthStencilBuffer.Get(), &depthStencilViewDesc, &mDepthStencilView);
+	hr = mD3dDevice->CreateDepthStencilView(mDepthStencilBuffer.Get(), &depthStencilViewDesc, &mDepthStencilView);
 
 	D3D11_SHADER_RESOURCE_VIEW_DESC depthStencilSRViewDesc;
 	memset(&depthStencilSRViewDesc, 0, sizeof(D3D11_SHADER_RESOURCE_VIEW_DESC));
@@ -217,10 +217,10 @@ void Direct3D::OnResize(UINT width, UINT height)
 	depthStencilSRViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
 	depthStencilSRViewDesc.Texture2D.MipLevels = 1;
 	
-	hr = md3dDevice->CreateShaderResourceView(mDepthStencilBuffer.Get(), &depthStencilSRViewDesc, &mDepthStencilSRView);
+	hr = mD3dDevice->CreateShaderResourceView(mDepthStencilBuffer.Get(), &depthStencilSRViewDesc, &mDepthStencilSRView);
 
 	// Bind render target and depth/stencil view to the pipeline
-	md3dImmediateContext->OMSetRenderTargets(1, mRenderTargetView.GetAddressOf(), mDepthStencilView.Get());
+	mD3dImmediateContext->OMSetRenderTargets(1, mRenderTargetView.GetAddressOf(), mDepthStencilView.Get());
 
 	// Set the viewport transform
 	mScreenViewport.TopLeftX = 0;
@@ -230,7 +230,7 @@ void Direct3D::OnResize(UINT width, UINT height)
 	mScreenViewport.MinDepth = 0.0f; // D3D uses a depth buffer range from 0
 	mScreenViewport.MaxDepth = 1.0f; // ... to 1
 
-	md3dImmediateContext->RSSetViewports(1, &mScreenViewport);
+	mD3dImmediateContext->RSSetViewports(1, &mScreenViewport);
 }
 
 void Direct3D::Shutdown()
@@ -246,20 +246,20 @@ void Direct3D::Shutdown()
 	mSwapChain = nullptr;
 	mDepthStencilBuffer = nullptr;
 
-	if (md3dImmediateContext)
+	if (mD3dImmediateContext)
 	{
-		md3dImmediateContext->ClearState();
-		md3dImmediateContext->Flush();
+		mD3dImmediateContext->ClearState();
+		mD3dImmediateContext->Flush();
 	}
 
-	md3dImmediateContext = nullptr;
+	mD3dImmediateContext = nullptr;
 
 #if defined(DEBUG) || defined(_DEBUG)
 	//ID3D11Debug *d3dDebug;
 	ComPtr<ID3D11Debug> d3dDebug;
 
 	//hr = md3dDevice->QueryInterface(__uuidof(ID3D11Debug), reinterpret_cast<void**>(&d3dDebug));
-	hr = md3dDevice.As(&d3dDebug);
+	hr = mD3dDevice.As(&d3dDebug);
 
 	if (SUCCEEDED(hr))
 	{
@@ -269,17 +269,17 @@ void Direct3D::Shutdown()
 	}
 #endif
 
-	md3dDevice = nullptr;
+	mD3dDevice = nullptr;
 }
 
 ID3D11Device1* Direct3D::GetDevice() const
 {
-	return md3dDevice.Get();
+	return mD3dDevice.Get();
 }
 
 ID3D11DeviceContext1* Direct3D::GetImmediateContext() const
 {
-	return md3dImmediateContext.Get();
+	return mD3dImmediateContext.Get();
 }
 
 ID3D11RenderTargetView* Direct3D::GetRenderTargetView() const

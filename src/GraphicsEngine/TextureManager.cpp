@@ -71,7 +71,7 @@ ID3D11ShaderResourceView* TextureManager::CreateStaticTexture(std::string fileNa
 
 void TextureManager::DeleteTexture(ID3D11ShaderResourceView* srv)
 {
-
+	srv = nullptr;
 }
 
 Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> TextureManager::CreateTexture(std::string fileName)

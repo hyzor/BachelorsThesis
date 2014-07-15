@@ -7,28 +7,30 @@
 
 GraphicsEngineImpl::GraphicsEngineImpl()
 {
-	//mPointLights = new PointLight[MAX_POINT_LIGHTS];
-	//mDirLights = new DirLight[MAX_DIR_LIGHTS];
-	//mSpotLights = new SpotLight[MAX_SPOT_LIGHTS];
-
-	mPointLightsCount = 0;
-	mDirLightsCount = 0;
-	mSpotLightsCount = 0;
+	mCurFont = nullptr;
 }
 
 GraphicsEngineImpl::~GraphicsEngineImpl()
 {
+	// Clean up materials and lights
 	mMaterials.clear();
 	mPointLights.clear();
 	mDirLights.clear();
 	mSpotLights.clear();
 
-	//delete[] mPointLights;
-	//delete[] mDirLights;
-	//delete[] mSpotLights;
+	// Clean up fonts
+	mCurFont = nullptr;
+
+	for (auto& it(mSpriteFonts.begin()); it != mSpriteFonts.end(); ++it)
+	{
+		if (it->second)
+			delete it->second;
+	}
 
 	delete mSky;
 	delete mCamera;
+
+	delete mSphereParticleSystem;
 
 	mDeferredBuffers->Shutdown();
 	delete mDeferredBuffers;
@@ -42,8 +44,6 @@ GraphicsEngineImpl::~GraphicsEngineImpl()
 	delete mInputLayouts;
 	RenderStates::DestroyAll();
 
-	delete mSpriteFontMonospace;
-	delete mSpriteFont;
 	delete mSpriteBatch;
 
 	delete mTextureMgr;
@@ -52,7 +52,7 @@ GraphicsEngineImpl::~GraphicsEngineImpl()
 	delete mD3D;
 }
 
-bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::string &resourceDir)
+bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::string& resourceDir)
 {
 	mScreenWidth = width;
 	mScreenHeight = height;
@@ -76,12 +76,12 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 	mCamera->UpdateOrthoMatrix(static_cast<float>(width), static_cast<float>(height), zNear, zFar);
 	mCamera->SetPosition(XMFLOAT3(0.0f, 0.0f, -400.0f));
 	mCamera->UpdateBaseViewMatrix();
+	mCamera->LookAt(XMFLOAT3(0.0f, 0.0f, 0.0f));
 	mCamera->Update();
 
 	mDeferredBuffers = new DeferredBuffers();
 	mDeferredBuffers->Init(mD3D->GetDevice(), width, height);
 
-	//mSky = new Sky(mD3D->GetDevice(), mTextureMgr, mResourceDir + "Textures\\SkyBox.dds", 2000.0f);
 	mSky = new Sky(mD3D->GetDevice(), mTextureMgr, 2000.0f);
 
 	mGameTime = 0.0f;
@@ -90,64 +90,49 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 	// Shaders
 	//-------------------------------------------------------------------------------------------------------
 	mShaderHandler = new ShaderHandler();
+	mShaderHandler->Init();
 
 	// Load all the pre-compiled shaders
-	// Deferred shaders
 	mShaderHandler->LoadCompiledVertexShader(L"..\\shaders\\BasicDeferredVS.cso", "BasicDeferredVS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\BasicDeferredPS.cso", "BasicDeferredPS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledVertexShader(L"..\\shaders\\LightDeferredVS.cso", "LightDeferredVS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\LightDeferredPS.cso", "LightDeferredPS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledVertexShader(L"..\\shaders\\SkyDeferredVS.cso", "SkyDeferredVS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\SkyDeferredPS.cso", "SkyDeferredPS", mD3D->GetDevice());
-
-	// Lit scene to texture
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\LightDeferredPS_ToTexture.cso", "LightDeferredPS_ToTexture", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\SphereParticleSystemCS.cso", "SphereParticleSystemCS", mD3D->GetDevice());
 
-	// Bind loaded shaders to shader objects
-	mShaderHandler->mBasicDeferredShader->BindShaders(
+	// Now create all the input layouts
+	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("BasicDeferredVS"), InputLayoutDesc::PosNormalTex, COUNT_OF(InputLayoutDesc::PosNormalTex), &mInputLayouts->PosNormalTex);
+	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("SkyDeferredVS"), InputLayoutDesc::Position, COUNT_OF(InputLayoutDesc::Position), &mInputLayouts->Position);
+	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("LightDeferredVS"), InputLayoutDesc::PosTex, COUNT_OF(InputLayoutDesc::PosTex), &mInputLayouts->PosTex);
+
+	// Init all the application shaders
+	mShaderHandler->mBasicDeferredShader->Init(mD3D->GetDevice(), mInputLayouts->PosNormalTex,
 		mShaderHandler->GetVertexShader("BasicDeferredVS"),
 		mShaderHandler->GetPixelShader("BasicDeferredPS"));
-	mShaderHandler->mLightDeferredShader->BindShaders(
+
+	mShaderHandler->mLightDeferredShader->Init(mD3D->GetDevice(), mInputLayouts->PosTex,
 		mShaderHandler->GetVertexShader("LightDeferredVS"),
 		mShaderHandler->GetPixelShader("LightDeferredPS"));
-	mShaderHandler->mSkyDeferredShader->BindShaders(
+
+	mShaderHandler->mSkyDeferredShader->Init(mD3D->GetDevice(), mInputLayouts->Position,
 		mShaderHandler->GetVertexShader("SkyDeferredVS"),
 		mShaderHandler->GetPixelShader("SkyDeferredPS"));
 
-	mShaderHandler->mLightDeferredToTextureShader->BindShaders(
+	mShaderHandler->mLightDeferredToTextureShader->Init(mD3D->GetDevice(), mInputLayouts->PosTex,
 		mShaderHandler->GetVertexShader("LightDeferredVS"),
 		mShaderHandler->GetPixelShader("LightDeferredPS_ToTexture"));
 
-	// Now create all the input layouts
-	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("BasicVS"), InputLayoutDesc::PosNormalTex, COUNT_OF(InputLayoutDesc::PosNormalTex), &mInputLayouts->PosNormalTex);
-	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("LineVS"), InputLayoutDesc::Position2D, COUNT_OF(InputLayoutDesc::Position2D), &mInputLayouts->Position2D);
-	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("SkyVS"), InputLayoutDesc::Position, COUNT_OF(InputLayoutDesc::Position), &mInputLayouts->Position);
-	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("NormalMapSkinnedVS"),
-		InputLayoutDesc::PosNormalTexTanSkinned,
-		COUNT_OF(InputLayoutDesc::PosNormalTexTanSkinned),
-		&mInputLayouts->PosNormalTexTanSkinned);
-	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("LightDeferredVS"), InputLayoutDesc::PosTex, COUNT_OF(InputLayoutDesc::PosTex), &mInputLayouts->PosTex);
-	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("BasicDeferredMorphVS"), InputLayoutDesc::PosNormalTexTargets4, COUNT_OF(InputLayoutDesc::PosNormalTexTargets4), &mInputLayouts->PosNormalTexTargets4);
-	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("StreamOutParticleVS"), InputLayoutDesc::Particle, COUNT_OF(InputLayoutDesc::Particle), &mInputLayouts->Particle);
-
-	// Init all the shader objects
-	mShaderHandler->mBasicDeferredShader->Init(mD3D->GetDevice(), mInputLayouts->PosNormalTex);
-	mShaderHandler->mLightDeferredShader->Init(mD3D->GetDevice(), mInputLayouts->PosTex);
-	mShaderHandler->mSkyDeferredShader->Init(mD3D->GetDevice(), mInputLayouts->Position);
-	mShaderHandler->mLightDeferredToTextureShader->Init(mD3D->GetDevice(), mInputLayouts->PosTex);
-
-	std::string fontPath = mResourceDir + "buxton.spritefont";
-	std::string fontPathMonospace = mResourceDir + "monospace_8.spritefont";
-	std::wstring fontPathW(fontPath.begin(), fontPath.end());
-	std::wstring fontPatMonospacehW(fontPathMonospace.begin(), fontPathMonospace.end());
-
 	mSpriteBatch = new SpriteBatch(mD3D->GetImmediateContext());
-	mSpriteFont = new SpriteFont(mD3D->GetDevice(), fontPathW.c_str());
-	mSpriteFontMonospace = new SpriteFont(mD3D->GetDevice(), fontPatMonospacehW.c_str());
 
 	// Create orthogonal window
 	mOrthoWindow = new OrthoWindow();
 	mOrthoWindow->Initialize(mD3D->GetDevice(), width, height);
+
+	mSphereParticleSystem = new SphereParticleSystem();
+	mSphereParticleSystem->Init(1.0f, 12, 6, 10000);
+	mSphereParticleSystem->CreateParticles(mD3D->GetDevice(), 10000);
 
 	return true;
 }
@@ -160,19 +145,12 @@ void GraphicsEngineImpl::Run(float dt)
 
 void GraphicsEngineImpl::DrawScene()
 {
-	// Restore default states
-	float blendFactor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-	mD3D->GetImmediateContext()->RSSetState(0);
-	mD3D->GetImmediateContext()->OMSetDepthStencilState(0, 0);
-	mD3D->GetImmediateContext()->OMSetBlendState(0, blendFactor, 0xffffffff);
-
 	mD3D->GetImmediateContext()->ClearDepthStencilView(mD3D->GetDepthStencilView(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
-
 	ID3D11RenderTargetView* renderTarget;
 
-	mD3D->GetImmediateContext()->RSSetState(0);
 	// Restore back and depth buffer and viewport to the OM stage
 	ID3D11RenderTargetView* renderTargets[1] = { mD3D->GetRenderTargetView() };
+
 	mD3D->GetImmediateContext()->OMSetRenderTargets(1, renderTargets, mD3D->GetDepthStencilView());
 	mD3D->GetImmediateContext()->ClearRenderTargetView(mD3D->GetRenderTargetView(), reinterpret_cast<const float*>(&Colors::LightSteelBlue));
 
@@ -182,19 +160,22 @@ void GraphicsEngineImpl::DrawScene()
 	// Render the scene to the render buffers and light it up
 	RenderSceneToTexture();
 
-	// Turn off Z-buffer to begin 2D-drawing
-	//mD3D->GetImmediateContext()->OMSetDepthStencilState(RenderStates::mDisabledDSS, 0);
-	mD3D->GetImmediateContext()->OMGetDepthStencilState(&RenderStates::mDepthStencilDisabledDSS, 0);
-
 	ID3D11ShaderResourceView* finalSRV = mDeferredBuffers->GetLitSceneSRV();
 
+	// Render the lit scene srv to our back buffer
 	renderTarget = mD3D->GetRenderTargetView();
-	mD3D->GetImmediateContext()->OMSetRenderTargets(1, &renderTarget, NULL);
-	mD3D->GetImmediateContext()->OMSetBlendState(0, blendFactor, 0xffffffff);
+	mShaderHandler->mLightDeferredShader->SetActive(mD3D->GetImmediateContext());
+	mShaderHandler->mLightDeferredShader->SetDiffuseTexture(mD3D->GetImmediateContext(), finalSRV);
+	mShaderHandler->mLightDeferredShader->SetSkipLighting(true);
+	mShaderHandler->mLightDeferredShader->SetSkipProcessing(true);
+	mOrthoWindow->Render(mD3D->GetImmediateContext());
+	mShaderHandler->mLightDeferredShader->SetDiffuseTexture(mD3D->GetImmediateContext(), NULL);
 
 	//-------------------------------------------------------------------------------------
 	// Restore defaults
 	//-------------------------------------------------------------------------------------
+	float blendFactor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
+
 	// Reset the render target to the back buffer.
 	renderTarget = mD3D->GetRenderTargetView();
 	mD3D->GetImmediateContext()->OMSetRenderTargets(1, &renderTarget, NULL);
@@ -211,8 +192,6 @@ void GraphicsEngineImpl::DrawScene()
 	mD3D->GetImmediateContext()->RSSetState(0);
 	mD3D->GetImmediateContext()->OMSetDepthStencilState(0, 0);
 	mD3D->GetImmediateContext()->OMSetBlendState(0, blendFactor, 0xffffffff);
-
-	mD3D->GetImmediateContext()->OMSetRenderTargets(0, nullptr, nullptr);
 }
 
 void GraphicsEngineImpl::UpdateScene(float dt, float gameTime)
@@ -222,6 +201,8 @@ void GraphicsEngineImpl::UpdateScene(float dt, float gameTime)
 	mCurFPS = mCurFPS / 1000.0f;
 
 	mCamera->Update();
+
+	mSphereParticleSystem->Update(mD3D->GetImmediateContext(), (double)mGameTime, dt);
 }
 
 void GraphicsEngineImpl::Present()
@@ -287,6 +268,10 @@ void GraphicsEngineImpl::RenderSceneToTexture()
 		0.0f, 0.0f, 1.0f, 0.0f,
 		0.5f, 0.5f, 0.0f, 1.0f);
 
+	// Set render target to light accumulation buffer, also use the depth/stencil buffer with previous stencil information
+	mD3D->GetImmediateContext()->OMSetRenderTargets(1, renderTargetsLitScene, mD3D->GetDepthStencilView());
+	mD3D->GetImmediateContext()->OMSetDepthStencilState(RenderStates::mDepthDisabledStencilUseDSS, 1); // Draw using stencil values of 1
+
 	//---------------------------------------------------------------------------------------
 	// Opaque objects lighting
 	//---------------------------------------------------------------------------------------
@@ -295,16 +280,9 @@ void GraphicsEngineImpl::RenderSceneToTexture()
 	mShaderHandler->mLightDeferredToTextureShader->SetPointLights(mD3D->GetImmediateContext(), (UINT)mPointLights.size(), mPointLights.data());
 	mShaderHandler->mLightDeferredToTextureShader->SetDirLights(mD3D->GetImmediateContext(), (UINT)mDirLights.size(), mDirLights.data());
 	mShaderHandler->mLightDeferredToTextureShader->SetSpotLights(mD3D->GetImmediateContext(), (UINT)mSpotLights.size(), mSpotLights.data());
-	//mShaderHandler->mLightDeferredToTextureShader->SetShadowTransform(mShadowMap->GetShadowTransform());
 	mShaderHandler->mLightDeferredToTextureShader->SetCameraViewProjMatrix(mCamera->GetViewMatrix(), mCamera->GetProjMatrix());
-	//mShaderHandler->mLightDeferredToTextureShader->SetLightWorldViewProj(mShadowMap->GetLightWorld(), mShadowMap->GetLightView(), mShadowMap->GetLightProj());
 
-	// TODO: Instead of hard coding these properties, get them from some modifiable settings collection
-	//mShaderHandler->mLightDeferredToTextureShader->SetFogProperties(1, 0.0195f, -125.0f, 0.105f, XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f));
-	mShaderHandler->mLightDeferredToTextureShader->SetMotionBlurProperties(1);
-	mShaderHandler->mLightDeferredToTextureShader->SetFpsValues(mCurFPS, mTargetFPS);
 	mShaderHandler->mLightDeferredToTextureShader->SetSkipLighting(false);
-	mShaderHandler->mLightDeferredToTextureShader->SetIsTransparencyPass(false);
 
 	mShaderHandler->mLightDeferredToTextureShader->UpdatePerFrame(mD3D->GetImmediateContext());
 
@@ -335,10 +313,7 @@ void GraphicsEngineImpl::RenderSceneToTexture()
 	// Lastly, clear (unbind) the textures (otherwise D3D11 WARNING)
 	mShaderHandler->mLightDeferredToTextureShader->SetDiffuseTexture(mD3D->GetImmediateContext(), NULL);
 	mShaderHandler->mLightDeferredToTextureShader->SetNormalTexture(mD3D->GetImmediateContext(), NULL);
-	mShaderHandler->mLightDeferredToTextureShader->SetSpecularTexture(mD3D->GetImmediateContext(), NULL);
-	mShaderHandler->mLightDeferredToTextureShader->SetSSAOTexture(mD3D->GetImmediateContext(), NULL);
 	mShaderHandler->mLightDeferredToTextureShader->SetDepthTexture(mD3D->GetImmediateContext(), NULL);
-	mShaderHandler->mLightDeferredToTextureShader->SetVelocityTexture(mD3D->GetImmediateContext(), NULL);
 
 	// Clear stencil buffer
 	mD3D->GetImmediateContext()->ClearDepthStencilView(mD3D->GetDepthStencilView(), /*D3D11_CLEAR_DEPTH | */D3D11_CLEAR_STENCIL, 1.0f, 0);
@@ -387,9 +362,19 @@ void GraphicsEngineImpl::UpdateSceneData()
 
 void GraphicsEngineImpl::PrintText(std::string text, int x, int y, XMFLOAT3 RGB, float scale, float alpha)
 {
-	std::wstring t = std::wstring(text.begin(), text.end());
-	XMVECTORF32 v_color = { RGB.x, RGB.y, RGB.z, alpha };
-	mSpriteFont->DrawString(mSpriteBatch, t.c_str(), XMFLOAT2((float)x, (float)y), v_color, 0.0f, XMFLOAT2(0, 0), scale);
+	if (mCurFont)
+	{
+		std::wstring t = std::wstring(text.begin(), text.end());
+		XMVECTORF32 v_color = { RGB.x, RGB.y, RGB.z, alpha };
+
+		mSpriteBatch->Begin();
+		mCurFont->DrawString(mSpriteBatch, t.c_str(), XMFLOAT2((float)x, (float)y), v_color, 0.0f, XMFLOAT2(0, 0), scale);
+		mSpriteBatch->End();
+	}
+	else
+	{
+		// Return error
+	}
 }
 
 void GraphicsEngineImpl::GetWindowResolution(UINT& width, UINT& height)
@@ -432,4 +417,31 @@ void GraphicsEngineImpl::ResetRenderTargetAndViewport()
 void GraphicsEngineImpl::SetSkyTexture(const std::string& fileName)
 {
 	mSky->SetTexture(mResourceDir + fileName, mTextureMgr);
+}
+
+void GraphicsEngineImpl::LoadFont(std::string fontPath, std::string fontName)
+{
+	std::string path = mResourceDir + fontPath;
+	std::wstring fontPathW(path.begin(), path.end());
+
+	if (mSpriteFonts[fontName] == NULL)
+	{
+		mSpriteFonts[fontName] = new SpriteFont(mD3D->GetDevice(), fontPathW.c_str());
+	}
+	else
+	{
+		// Return message/error
+	}
+}
+
+void GraphicsEngineImpl::SetFont(std::string fontName)
+{
+	if (mSpriteFonts[fontName] == NULL)
+	{
+		// Return error
+	}
+	else
+	{
+		mCurFont = mSpriteFonts[fontName];
+	}
 }

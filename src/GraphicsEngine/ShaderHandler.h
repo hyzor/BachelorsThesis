@@ -44,188 +44,239 @@ public:
 		_aligned_free(p);
 	}
 
-	virtual bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout) = 0;
-	virtual bool SetActive(ID3D11DeviceContext* dc) = 0;
+	IShader();
+	~IShader();
 
-	const ID3D11VertexShader* GetVertexShader() { return mVertexShader; }
-	const ID3D11PixelShader* GetPixelShader() { return mPixelShader; }
+	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout);
+	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader);
 
-	virtual void Update(ID3D11DeviceContext* dc) = 0;
+	bool SetActive(ID3D11DeviceContext* dc);
+
+	const ID3D11VertexShader* GetVertexShader();
+	const ID3D11PixelShader* GetPixelShader();
+	const ID3D11GeometryShader* GetGeometryShader();
+
+	//virtual void UpdatePerFrame(ID3D11DeviceContext* dc) = 0;
+
+	void UpdatePerFrame(ID3D11DeviceContext* dc);
+	void UpdatePerObj(ID3D11DeviceContext* dc);
+
+	template<typename bufferVariables>
+	static HRESULT CreateBuffer(ID3D11Device* device, ID3D11Buffer** buffer, bufferVariables* bufferVars);
+
+	template<typename bufferVariables>
+	static HRESULT CreateConstantBuffer(ID3D11Device* device, ID3D11Buffer** buffer, bufferVariables* bufferVars);
+
+	template<typename bufferVariables>
+	static HRESULT UpdateBuffer(ID3D11DeviceContext* dc, ID3D11Buffer* buffer, bufferVariables* bufferVars);
 
 protected:
-	ID3D11VertexShader* mVertexShader;
-	ID3D11PixelShader* mPixelShader;
+
 	ID3D11InputLayout* mInputLayout;
+
+	struct VertexShaderWrapper
+	{
+		ID3D11VertexShader* VertexShader;
+		ID3D11Buffer* PerObjBuffer;
+		ID3D11Buffer* PerFrameBuffer;
+	};
+
+	struct PixelShaderWrapper
+	{
+		ID3D11PixelShader* PixelShader;
+		ID3D11Buffer* PerObjBuffer;
+		ID3D11Buffer* PerFrameBuffer;
+	};
+
+	struct GeometryShaderWrapper
+	{
+		ID3D11GeometryShader* GeometryShader;
+		ID3D11Buffer* PerObjBuffer;
+		ID3D11Buffer* PerFrameBuffer;
+	};
+
+	VertexShaderWrapper mVertexShaderWrapper;
+	PixelShaderWrapper mPixelShaderWrapper;
+	GeometryShaderWrapper mGeometryShaderWrapper;
 };
 
-#pragma region SkyDeferredShader
+template<typename bufferVariables>
+HRESULT IShader::CreateConstantBuffer(ID3D11Device* device, ID3D11Buffer** buffer, bufferVariables* bufferVars)
+{
+	HRESULT hr;
+
+	ZeroMemory(bufferVars, sizeof(bufferVariables));
+
+	// Fill in a buffer description.
+	D3D11_BUFFER_DESC cbDesc;
+	cbDesc.ByteWidth = sizeof(bufferVariables);
+	cbDesc.Usage = D3D11_USAGE_DEFAULT;
+	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cbDesc.MiscFlags = 0;
+	cbDesc.StructureByteStride = 0;
+
+	// Fill in the subresource data.
+	D3D11_SUBRESOURCE_DATA InitData;
+	InitData.pSysMem = &bufferVars;
+	InitData.SysMemPitch = 0;
+	InitData.SysMemSlicePitch = 0;
+
+	// Now create the buffer
+	hr = device->CreateBuffer(&cbDesc, &InitData, buffer);
+
+	return hr;
+}
+
+template<typename bufferVariables>
+HRESULT IShader::CreateBuffer(ID3D11Device* device, ID3D11Buffer** buffer, bufferVariables* bufferVars)
+{
+	HRESULT hr;
+
+	ZeroMemory(bufferVars, sizeof(bufferVariables));
+
+	// Fill in a buffer description.
+	D3D11_BUFFER_DESC cbDesc;
+	cbDesc.ByteWidth = sizeof(bufferVariables);
+	cbDesc.Usage = D3D11_USAGE_DYNAMIC;
+	cbDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+	cbDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	cbDesc.MiscFlags = 0;
+	cbDesc.StructureByteStride = 0;
+
+	// Fill in the subresource data.
+	D3D11_SUBRESOURCE_DATA InitData;
+	InitData.pSysMem = &bufferVars;
+	InitData.SysMemPitch = 0;
+	InitData.SysMemSlicePitch = 0;
+
+	// Now create the buffer
+	hr = device->CreateBuffer(&cbDesc, &InitData, buffer);
+
+	return hr;
+}
+
+template<typename bufferVariables>
+HRESULT IShader::UpdateBuffer(ID3D11DeviceContext* dc, ID3D11Buffer* buffer, bufferVariables* bufferVars)
+{
+	HRESULT hr;
+
+	// Update constant shader buffers using our cache
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+
+	// Vertex shader per obj buffer
+	hr = dc->Map(buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+	bufferVariables* dataPtr = (bufferVariables*)mappedResource.pData;
+	*dataPtr = *bufferVars;
+	dc->Unmap(buffer, 0);
+
+	return hr;
+}
+
 class SkyDeferredShader : public IShader
 {
 public:
 	SkyDeferredShader();
 	~SkyDeferredShader();
 
-	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout);
 	bool SetActive(ID3D11DeviceContext* dc);
 
-	bool BindShaders(ID3D11VertexShader* vShader, ID3D11PixelShader* pShader);
+	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader);
 
 	void SetWorldViewProj(const XMMATRIX& worldViewProj);
-	void SetPrevWorldViewProj(XMMATRIX& prevWorld, XMMATRIX& prevViewProj);
 	void SetCubeMap(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* cubeMap);
 
-	void Update(ID3D11DeviceContext* dc);
+	void UpdatePerFrame(ID3D11DeviceContext* dc);
 
 private:
-	struct VS_CPERFRAMEBUFFER
+	struct BUFFER_PERFRAME_VS
 	{
-		XMMATRIX WorldViewProj;
-		XMMATRIX prevWorldViewProj;
+		XMMATRIX worldViewProj;
 	};
 
-	struct BUFFERCACHE
-	{
-		VS_CPERFRAMEBUFFER vsBuffer;
-	};
-
-	// VS - per frame
-	ID3D11Buffer* vs_cPerFrameBuffer;
-	VS_CPERFRAMEBUFFER vs_cPerFrameBufferVariables;
-
-	struct BUFFERCACHE mBufferCache;
+	BUFFER_PERFRAME_VS mBuffer_PerFrame_VS;
 };
-#pragma endregion SkyDeferredShader
 
-#pragma region BasicDeferredShader
 class BasicDeferredShader : public IShader
 {
 public:
 	BasicDeferredShader();
 	~BasicDeferredShader();
 
-	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout);
-	bool BindShaders(ID3D11VertexShader* vShader, ID3D11PixelShader* pShader);
 	bool SetActive(ID3D11DeviceContext* dc);
+
+	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader);
 
 	void SetWorldViewProjTex(XMMATRIX& world,
 		XMMATRIX& viewProj,
 		XMMATRIX& tex);
 
-	void SetPrevWorldViewProj(XMMATRIX& prevWorld, XMMATRIX& prevViewProj);
-
-	void SetShadowTransformLightViewProj(XMMATRIX& shadowTransform, XMMATRIX& lightView, XMMATRIX& lightProj);
-
 	void SetMaterial(const Material& mat, UINT globalMaterialIndex);
 	void SetDiffuseMap(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
-	void SetShadowMap(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
-	void SetType(int type);
 
 	void UpdatePerObj(ID3D11DeviceContext* dc);
 
 private:
-	void Update(ID3D11DeviceContext* dc) { ; }
-
-	struct VS_CPEROBJBUFFER
+	struct BUFFER_PEROBJ_VS
 	{
 		XMMATRIX world;
 		XMMATRIX worldInvTranspose;
 		XMMATRIX worldViewProj;
 		XMMATRIX texTransform;
-		XMMATRIX prevWorldViewProj;
-		XMMATRIX toEyeSpace;
 	};
 	
-	struct PS_CPEROBJBUFFER
+	struct BUFFER_PEROBJ_PS
 	{
 		Material mat;
 
 		unsigned int globalMaterialIndex;
-		int type;
-		XMFLOAT2 padding;
-
-		XMFLOAT4 nearDepths;
-		XMFLOAT4 farDepths;
-		int nrOfCascades;
-		XMFLOAT3 padding1;
+		XMFLOAT3 padding;
 	};
 
-	struct BUFFERCACHE
-	{
-		VS_CPEROBJBUFFER vsPerObjBuffer;
-		PS_CPEROBJBUFFER psPerObjBuffer;
-	};
-
-	struct BUFFERCACHE mBufferCache;
-
-	// VS - per object
-	ID3D11Buffer* vs_cPerObjBuffer;
-	VS_CPEROBJBUFFER vs_cPerObjBufferVariables;
-
-	// PS - per object
-	ID3D11Buffer* ps_cPerObjBuffer;
-	PS_CPEROBJBUFFER ps_cPerObjBufferVariables;
+	BUFFER_PEROBJ_VS mBuffer_PerObj_VS;
+	BUFFER_PEROBJ_PS mBuffer_PerObj_PS;
 };
-#pragma endregion BasicDeferredShader
 
-#pragma region LightDeferredShader
 class LightDeferredShader : public IShader
 {
 public:
 	LightDeferredShader();
 	~LightDeferredShader();
 
-	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout);
-	bool BindShaders(ID3D11VertexShader* vShader, ID3D11PixelShader* pShader);
 	bool SetActive(ID3D11DeviceContext* dc);
+
+	void Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader);
 
 	void SetWorldViewProj(XMMATRIX& world, XMMATRIX& view, XMMATRIX& proj);
 
 	void SetEyePosW(XMFLOAT3 eyePosW);
 	void SetCameraViewProjMatrix(XMMATRIX& camViewMatrix, XMMATRIX& proj);
-	void SetCameraWorldMatrix(XMMATRIX& camWorldMatrix);
-	void SetLightWorldViewProj(XMMATRIX& lightWorld, XMMATRIX& lightView, XMMATRIX& lightProj);
 
 	void SetPointLights(ID3D11DeviceContext* dc, UINT numPointLights, PointLight* pointLights[]);
 	void SetDirLights(ID3D11DeviceContext* dc, UINT numDirLights, DirLight* dirLights[]);
 	void SetSpotLights(ID3D11DeviceContext* dc, UINT numSpotLights, SpotLight* spotLights[]);
-
 	void SetMaterials(ID3D11DeviceContext* dc, UINT numMaterials, Material* mats[]);
 
 	void SetDiffuseTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
 	void SetNormalTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
-	void SetSpecularTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
-	void SetSSAOTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
-	void SetVelocityTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
-
-	void SetBackgroundTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
-
 	void SetDepthTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
 
-	void SetShadowMapTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
-	void SetShadowTransform(XMMATRIX& shadowTransform);
-
-	void SetFogProperties(int enableFogging, float heightFalloff, float heightOffset, float globalDensity, XMFLOAT4 fogColor);
-	void SetMotionBlurProperties(int enableMotionBlur);
-	void SetFpsValues(float curFps, float targetFps);
-
 	void SetSkipLighting(bool skipLighting);
-	void SetIsTransparencyPass(bool isTransparencyPass);
+	void SetSkipProcessing(bool skipProcessing);
 
 	void UpdatePerObj(ID3D11DeviceContext* dc);
 	void UpdatePerFrame(ID3D11DeviceContext* dc);
 
 private:
-	void Update(ID3D11DeviceContext* dc) { ; }
-
-	struct VS_CPEROBJBUFFER
+	struct BUFFER_PEROBJ_VS
 	{
 		XMMATRIX worldViewProj;
-		XMMATRIX shadowTransform;
-		XMMATRIX lightViewProj;
-		XMMATRIX viewProjInv;
 	};
 
-	struct PS_CPERFRAMEBUFFER
+	struct BUFFER_PERFRAME_PS
 	{
 		PointLight pointLights[MAX_POINT_LIGHTS];
 		DirLight dirLights[MAX_DIR_LIGHTS];
@@ -234,19 +285,10 @@ private:
 		UINT numPLights;
 		UINT numDirLights;
 		UINT numSLights;
-		UINT padding;
+		UINT skipProcessing;
 
 		// Forms into a 4D vector
 		XMFLOAT3 gEyePosW;
-		int isTransparencyPass;
-
-		int enableFogging;
-		float fogHeightFalloff, fogHeightOffset, fogGlobalDensity;
-		XMFLOAT4 fogColor;
-
-		int enableMotionBlur;
-		float curFPS;
-		float targetFPS;
 		int skipLighting;
 
 		XMMATRIX camViewProjInv;
@@ -254,23 +296,22 @@ private:
 		Material materials[MAX_MATERIALS];
 	};
 
-	struct BUFFERCACHE
-	{
-		VS_CPEROBJBUFFER vsPerObjBuffer;
-		PS_CPERFRAMEBUFFER psPerFrameBuffer;
-	};
-
-	struct BUFFERCACHE mBufferCache;
-
-	// VS - per object
-	ID3D11Buffer* vs_cPerObjBuffer;
-	VS_CPEROBJBUFFER vs_cPerObjBufferVariables;
-
-	// PS - per object
-	ID3D11Buffer* ps_cPerFrameBuffer;
-	PS_CPERFRAMEBUFFER ps_cPerFrameBufferVariables;
+	BUFFER_PEROBJ_VS mBuffer_PerObj_VS;
+	BUFFER_PERFRAME_PS mBuffer_PerFrame_PS;
 };
-#pragma endregion LightDeferredShader
+
+class ParticleShader : public IShader
+{
+public:
+	ParticleShader();
+	~ParticleShader();
+
+	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader);
+
+private:
+
+};
 
 #pragma region ShaderHandler
 enum ShaderType
@@ -278,7 +319,8 @@ enum ShaderType
 	VERTEXSHADER = 0,
 	PIXELSHADER,
 	GEOMETRYSHADER,
-	GEOMETRYSTREAMOUTSHADER
+	GEOMETRYSTREAMOUTSHADER,
+	COMPUTESHADER
 };
 
 struct Shader
@@ -295,14 +337,18 @@ public:
 	ShaderHandler();
 	~ShaderHandler();
 
+	bool Init();
+
 	void LoadCompiledVertexShader(LPCWSTR fileName, char* name, ID3D11Device* device);
 	void LoadCompiledPixelShader(LPCWSTR fileName, char* name, ID3D11Device* device);
 	void LoadCompiledGeometryShader(LPCWSTR fileName, char* name, ID3D11Device* device);
 	void LoadCompiledGeometryStreamOutShader(LPCWSTR fileName, char* name, ID3D11Device* device, D3D11_SO_DECLARATION_ENTRY pDecl[], UINT pDeclSize, UINT rasterizedStream = 0, UINT* bufferStrides = NULL, UINT numStrides = 0);
+	void LoadCompiledComputeShader(LPCWSTR fileName, char* name, ID3D11Device* device);
 
 	ID3D11VertexShader* GetVertexShader(std::string name);
 	ID3D11PixelShader* GetPixelShader(std::string name);
 	ID3D11GeometryShader* GetGeometryShader(std::string name);
+	ID3D11ComputeShader* GetComputeShader(std::string name);
 
 	Shader* GetShader(std::string name);
 
@@ -312,12 +358,12 @@ public:
 	LightDeferredShader* mLightDeferredToTextureShader;
 
 private:
-
 	BYTE* LoadByteCode(char* fileName, UINT& size);
 
 	std::map<std::string, ID3D11VertexShader*> mVertexShaders;
 	std::map<std::string, ID3D11PixelShader*> mPixelShaders;
 	std::map<std::string, ID3D11GeometryShader*> mGeometryShaders;
+	std::map<std::string, ID3D11ComputeShader*> mComputeShaders;
 
 	std::vector<Shader*> mShaders;
 };

@@ -19,13 +19,16 @@ void Application::Start()
 	m_window = new Window(1024, 768, L"Thesis");
 	m_window->SetListener(this);
 
-	mResourceDir = "../content";
+	mResourceDir = "..\\..\\content\\";
 
 	m_inputHandler = m_window->GetInputHandler();
 
 	// Create graphics engine
 	m_graphicsEngine = CreateGraphicsEngine();
 	m_graphicsEngine->Init(m_window->GetHandle(), m_window->GetWidth(), m_window->GetHeight(), mResourceDir);
+	m_graphicsEngine->LoadFont("Fonts\\buxton.spritefont", "Buxton");
+	m_graphicsEngine->SetFont("Buxton");
+	m_graphicsEngine->SetSkyTexture("Textures\\SkyBox_Space.dds");
 
 	// Don't start listening to input events until everything has been initialized.
 	m_inputHandler->AddListener(this);
@@ -64,6 +67,7 @@ void Application::Update(float dt, float gameTime)
 {
 	m_graphicsEngine->UpdateScene(dt, gameTime);
 	m_graphicsEngine->DrawScene();
+	m_graphicsEngine->PrintText("Test", 0, 0, DirectX::XMFLOAT3(1, 1, 1), 1.0f, 1.0f);
 }
 
 void Application::OnWindowShouldClose()

@@ -30,8 +30,8 @@ public:
 private:
 	D3D11_VIEWPORT mScreenViewport;
 
-	Microsoft::WRL::ComPtr<ID3D11Device1> md3dDevice;
-	Microsoft::WRL::ComPtr<ID3D11DeviceContext1> md3dImmediateContext;
+	Microsoft::WRL::ComPtr<ID3D11Device1> mD3dDevice;
+	Microsoft::WRL::ComPtr<ID3D11DeviceContext1> mD3dImmediateContext;
 	//Microsoft::WRL::ComPtr<IDXGISwapChain1> mSwapChain;
 	Microsoft::WRL::ComPtr<IDXGISwapChain> mSwapChain;
 	Microsoft::WRL::ComPtr<ID3D11Texture2D> mDepthStencilBuffer;
@@ -39,7 +39,7 @@ private:
 	Microsoft::WRL::ComPtr<ID3D11DepthStencilView> mDepthStencilView;
 	Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> mDepthStencilSRView;
 
-	D3D_DRIVER_TYPE md3dDriverType;
+	D3D_DRIVER_TYPE mD3dDriverType;
 
 	bool mEnable4xMsaa;
 	UINT m4xMSAAQuality;

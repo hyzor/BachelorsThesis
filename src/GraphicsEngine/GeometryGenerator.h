@@ -44,7 +44,7 @@ public:
 
 	// Creates a sphere centered at the origin, slices and stacks determine the degree
 	// of tessellation
-	void createSphere(float radius, UINT sliceCount, UINT stackCount, MeshData& meshData);
+	void CreateSphere(float radius, UINT sliceCount, UINT stackCount, MeshData& meshData);
 };
 
 #endif

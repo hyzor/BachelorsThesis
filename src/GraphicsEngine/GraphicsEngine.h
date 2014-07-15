@@ -34,7 +34,9 @@ public:
 	virtual void SetSkyTexture(const std::string& fileName) = 0;
 
 	// Text
+	virtual void LoadFont(std::string fontPath, std::string fontName) = 0;
 	virtual void PrintText(std::string text, int x, int y, DirectX::XMFLOAT3 RGB, float scale, float alpha) = 0;
+	virtual void SetFont(std::string fontName) = 0;
 };
 
 DLL_API GraphicsEngine* CreateGraphicsEngine();

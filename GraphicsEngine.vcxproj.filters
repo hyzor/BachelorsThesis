@@ -13,6 +13,12 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{f14588a6-4bb4-4463-8b77-728795bb05c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shaders\Particle system">
+      <UniqueIdentifier>{8ad4cb5f-9961-4739-b7ec-c06c29851845}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\GraphicsEngine\DirectXUtil.cpp">
@@ -52,6 +58,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\GraphicsEngine\GraphicsEngineImpl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\GraphicsEngine\ParticleSystem.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -98,5 +107,54 @@
     <ClInclude Include="src\GraphicsEngine\GraphicsEngineImpl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\GraphicsEngine\ParticleSystem.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="src\GraphicsEngine\Shaders\BasicDeferredPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\BasicDeferredVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\LightDeferredPS_ToTexture.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\LightDeferredVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\LightDeferredPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\SkyDeferredPS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\SkyDeferredVS.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\SphereParticleSystemCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\ParticleDrawVS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\ParticleDrawPS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\GraphicsEngine\Shaders\LightDef.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="src\GraphicsEngine\Shaders\Common.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="src\GraphicsEngine\Shaders\ParticleDef.hlsli">
+      <Filter>Shaders\Particle system</Filter>
+    </None>
+    <None Include="src\GraphicsEngine\Shaders\ParticleSystemDef.hlsli">
+      <Filter>Shaders\Particle system</Filter>
+    </None>
   </ItemGroup>
 </Project>

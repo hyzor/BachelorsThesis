@@ -20,7 +20,7 @@ Sky::Sky(ID3D11Device* device, TextureManager *textureManager, const std::string
 	// Generate sphere
 	GeometryGenerator::MeshData sphere;
 	GeometryGenerator geoGen;
-	geoGen.createSphere(skySphereRadius, 30, 30, sphere);
+	geoGen.CreateSphere(skySphereRadius, 30, 30, sphere);
 
 	std::vector<XMFLOAT3> vertices(sphere.vertices.size());
 
@@ -68,7 +68,7 @@ Sky::Sky(ID3D11Device* device, TextureManager *textureManager, float skySphereRa
 	// Generate sphere
 	GeometryGenerator::MeshData sphere;
 	GeometryGenerator geoGen;
-	geoGen.createSphere(skySphereRadius, 30, 30, sphere);
+	geoGen.CreateSphere(skySphereRadius, 30, 30, sphere);
 
 	std::vector<XMFLOAT3> vertices(sphere.vertices.size());
 
@@ -120,7 +120,7 @@ Sky::~Sky(void)
 	ReleaseCOM(mIndexBuffer);
 }
 
-Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Sky::cubeMapSRV()
+Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> Sky::GetCubeMapSRV()
 {
 	return mCubeMapSRV;
 }
@@ -136,8 +136,7 @@ void Sky::Draw(ID3D11DeviceContext* dc, const Camera& cam, SkyDeferredShader* sk
 	skyShader->SetActive(dc);
 	skyShader->SetWorldViewProj(WVP);
 	skyShader->SetCubeMap(dc, mCubeMapSRV.Get());
-	skyShader->Update(dc);
-	skyShader->SetPrevWorldViewProj(T, cam.GetPreviousViewProj());
+	skyShader->UpdatePerFrame(dc);
 
 	UINT stride = sizeof(XMFLOAT3);
 	UINT offset = 0;

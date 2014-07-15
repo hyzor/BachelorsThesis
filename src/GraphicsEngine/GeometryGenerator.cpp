@@ -9,7 +9,7 @@
 // Must be included last!
 #include "common/debug.h"
 
-void GeometryGenerator::createSphere(float radius, UINT sliceCount, UINT stackCount, MeshData& meshData)
+void GeometryGenerator::CreateSphere(float radius, UINT sliceCount, UINT stackCount, MeshData& meshData)
 {
 	meshData.vertices.clear();
 	meshData.indices.clear();
