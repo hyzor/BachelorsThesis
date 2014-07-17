@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\GraphicsEngine\Camera.cpp" />
+    <ClCompile Include="src\GraphicsEngine\CameraController.cpp" />
+    <ClCompile Include="src\GraphicsEngine\CameraControllerImpl.cpp" />
     <ClCompile Include="src\GraphicsEngine\DeferredBuffers.cpp" />
     <ClCompile Include="src\GraphicsEngine\Direct3D.cpp" />
     <ClCompile Include="src\GraphicsEngine\DirectXUtil.cpp" />
@@ -28,6 +30,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\GraphicsEngine\Camera.h" />
+    <ClInclude Include="src\GraphicsEngine\CameraController.h" />
+    <ClInclude Include="src\GraphicsEngine\CameraControllerImpl.h" />
     <ClInclude Include="src\GraphicsEngine\DeferredBuffers.h" />
     <ClInclude Include="src\GraphicsEngine\Direct3D.h" />
     <ClInclude Include="src\GraphicsEngine\DirectXUtil.h" />

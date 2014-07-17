@@ -6,7 +6,6 @@
 
 #include "Sky.h"
 #include "GeometryGenerator.h"
-#include "Effects.h"
 #include "Vertex.h"
 
 // Must be included last!

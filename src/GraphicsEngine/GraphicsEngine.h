@@ -1,10 +1,9 @@
 #ifndef GRAPHICS_GRAPHICSENGINE_H_
 #define GRAPHICS_GRAPHICSENGINE_H_
 
-#include <DirectXMath.h>
-
 #include <string>
 #include "common/platform.h"
+#include "CameraController.h"
 
 class DLL_API GraphicsEngine
 {
@@ -33,10 +32,16 @@ public:
 
 	virtual void SetSkyTexture(const std::string& fileName) = 0;
 
+	virtual const float GetFramerate() = 0;
+
 	// Text
 	virtual void LoadFont(std::string fontPath, std::string fontName) = 0;
-	virtual void PrintText(std::string text, int x, int y, DirectX::XMFLOAT3 RGB, float scale, float alpha) = 0;
+	virtual void PrintText(std::string text, int x, int y, float red, float green, float blue, float scale, float alpha) = 0;
 	virtual void SetFont(std::string fontName) = 0;
+
+	// Camera controller
+	virtual CameraController* CreateCameraController() = 0;
+	virtual void DeleteCameraController(CameraController* camController) = 0;
 };
 
 DLL_API GraphicsEngine* CreateGraphicsEngine();

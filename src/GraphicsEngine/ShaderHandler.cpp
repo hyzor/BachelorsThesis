@@ -47,6 +47,7 @@ ShaderHandler::~ShaderHandler()
 	delete mLightDeferredShader;
 	delete mSkyDeferredShader;
 	delete mLightDeferredToTextureShader;
+	delete mParticleDrawShader;
 }
 
 void ShaderHandler::LoadCompiledVertexShader(LPCWSTR fileName, char* name, ID3D11Device* device)
@@ -248,6 +249,20 @@ ID3D11GeometryShader* ShaderHandler::GetGeometryShader(std::string name)
 	}
 }
 
+ID3D11ComputeShader* ShaderHandler::GetComputeShader(std::string name)
+{
+	if (mComputeShaders[name])
+		return mComputeShaders[name];
+	else
+	{
+		std::wstringstream ErrorMsg;
+		ErrorMsg << "Failed to get compute shader " << name.c_str();
+		MessageBox(0, ErrorMsg.str().c_str(), 0, 0);
+		return NULL;
+	}
+}
+
+
 
 Shader* ShaderHandler::GetShader(std::string name)
 {
@@ -271,10 +286,10 @@ bool ShaderHandler::Init()
 	mLightDeferredShader = new LightDeferredShader();
 	mSkyDeferredShader = new SkyDeferredShader();
 	mLightDeferredToTextureShader = new LightDeferredShader();
+	mParticleDrawShader = new ParticleDrawShader();
 
 	return true;
 }
-
 #pragma endregion ShaderHandler
 
 IShader::IShader(){}
@@ -287,13 +302,16 @@ IShader::~IShader()
 	ReleaseCOM(mPixelShaderWrapper.PerObjBuffer);
 	ReleaseCOM(mGeometryShaderWrapper.PerFrameBuffer);
 	ReleaseCOM(mGeometryShaderWrapper.PerObjBuffer);
+	ReleaseCOM(mComputeShaderWrapper.PerFrameBuffer);
+	ReleaseCOM(mComputeShaderWrapper.PerObjBuffer);
 }
 
 bool IShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout)
 {
-	ZeroMemory(&mVertexShaderWrapper, sizeof(VertexShaderWrapper));
-	ZeroMemory(&mPixelShaderWrapper, sizeof(PixelShaderWrapper));
-	ZeroMemory(&mGeometryShaderWrapper, sizeof(GeometryShaderWrapper));
+	ZeroMemory(&mVertexShaderWrapper, sizeof(mVertexShaderWrapper));
+	ZeroMemory(&mPixelShaderWrapper, sizeof(mPixelShaderWrapper));
+	ZeroMemory(&mGeometryShaderWrapper, sizeof(mGeometryShaderWrapper));
+	ZeroMemory(&mComputeShaderWrapper, sizeof(mComputeShaderWrapper));
 
 	mInputLayout = inputLayout;
 
@@ -302,54 +320,103 @@ bool IShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout)
 
 bool IShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout, ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader)
 {
-	ZeroMemory(&mVertexShaderWrapper, sizeof(VertexShaderWrapper));
-	ZeroMemory(&mPixelShaderWrapper, sizeof(PixelShaderWrapper));
-	ZeroMemory(&mGeometryShaderWrapper, sizeof(GeometryShaderWrapper));
+	Init(device, inputLayout);
 
 	mVertexShaderWrapper.VertexShader = vertexShader;
 	mPixelShaderWrapper.PixelShader = pixelShader;
 
-	mInputLayout = inputLayout;
-
 	return true;
 }
 
-bool IShader::SetActive(ID3D11DeviceContext* dc)
+void IShader::SetActive(ID3D11DeviceContext* dc)
 {
 	if (mInputLayout)
 		dc->IASetInputLayout(mInputLayout);
+	else
+		dc->IASetInputLayout(nullptr);
+
+	ID3D11ShaderResourceView* nullSRV[16] = { NULL };
 
 	if (mVertexShaderWrapper.VertexShader)
+	{
 		dc->VSSetShader(mVertexShaderWrapper.VertexShader, nullptr, 0);
+		dc->VSSetShaderResources(0, 16, nullSRV);
+	}
+	else
+		dc->VSSetShader(nullptr, nullptr, 0);
 
 	if (mPixelShaderWrapper.PixelShader)
+	{
 		dc->PSSetShader(mPixelShaderWrapper.PixelShader, nullptr, 0);
+		dc->PSSetShaderResources(0, 16, nullSRV);
+	}
+	else
+		dc->PSSetShader(nullptr, nullptr, 0);
 
 	if (mGeometryShaderWrapper.GeometryShader)
+	{
 		dc->GSSetShader(mGeometryShaderWrapper.GeometryShader, nullptr, 0);
+		dc->GSSetShaderResources(0, 16, nullSRV);
+	}
+	else
+		dc->GSSetShader(nullptr, nullptr, 0);
 
-	return true;
+	if (mComputeShaderWrapper.ComputeShader)
+	{
+		dc->CSSetShaderResources(0, 16, nullSRV);
+	}
+	else
+		dc->CSSetShader(nullptr, nullptr, 0);
 }
 
 void IShader::UpdatePerFrame(ID3D11DeviceContext* dc){}
 
 void IShader::UpdatePerObj(ID3D11DeviceContext* dc){}
 
+const ID3D11VertexShader* IShader::GetVertexShader()
+{
+	if (mVertexShaderWrapper.VertexShader)
+		return mVertexShaderWrapper.VertexShader;
+
+	return nullptr;
+}
+
+const ID3D11PixelShader* IShader::GetPixelShader()
+{
+	if (mPixelShaderWrapper.PixelShader)
+		return mPixelShaderWrapper.PixelShader;
+
+	return nullptr;
+}
+
+const ID3D11GeometryShader* IShader::GetGeometryShader()
+{
+	if (mGeometryShaderWrapper.GeometryShader)
+		return mGeometryShaderWrapper.GeometryShader;
+
+	return nullptr;
+}
+
+const ID3D11ComputeShader* IShader::GetComputeShader()
+{
+	if (mComputeShaderWrapper.ComputeShader)
+		return mComputeShaderWrapper.ComputeShader;
+
+	return nullptr;
+}
+
 BasicDeferredShader::BasicDeferredShader()
 	: IShader(){}
 
-BasicDeferredShader::~BasicDeferredShader()
-{}
+BasicDeferredShader::~BasicDeferredShader(){}
 
-bool BasicDeferredShader::SetActive(ID3D11DeviceContext* dc)
+void BasicDeferredShader::SetActive(ID3D11DeviceContext* dc)
 {
 	IShader::SetActive(dc);
 
 	dc->PSSetSamplers(0, 1, &RenderStates::mLinearSS);
 	dc->PSSetSamplers(1, 1, &RenderStates::mAnisotropicSS);
 	dc->PSSetSamplers(2, 1, &RenderStates::mComparisonSS);
-
-	return true;
 }
 
 void BasicDeferredShader::SetWorldViewProjTex(XMMATRIX& world, XMMATRIX& viewProj, XMMATRIX& tex)
@@ -432,7 +499,7 @@ void LightDeferredShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLay
 	IShader::CreateBuffer(device, &mPixelShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_PS);
 }
 
-bool LightDeferredShader::SetActive(ID3D11DeviceContext* dc)
+void LightDeferredShader::SetActive(ID3D11DeviceContext* dc)
 {
 	IShader::SetActive(dc);
 
@@ -440,8 +507,6 @@ bool LightDeferredShader::SetActive(ID3D11DeviceContext* dc)
 	dc->PSSetSamplers(1, 1, &RenderStates::mAnisotropicSS);
 	dc->PSSetSamplers(2, 1, &RenderStates::mComparisonSS);
 	dc->PSSetSamplers(3, 1, &RenderStates::mPointClampedSS);
-
-	return true;
 }
 
 void LightDeferredShader::SetDiffuseTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex)
@@ -514,13 +579,11 @@ bool SkyDeferredShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayou
 	return true;
 }
 
-bool SkyDeferredShader::SetActive(ID3D11DeviceContext* dc)
+void SkyDeferredShader::SetActive(ID3D11DeviceContext* dc)
 {
 	IShader::SetActive(dc);
 
 	dc->PSSetSamplers(0, 1, &RenderStates::mLinearSS);
-
-	return true;
 }
 
 void SkyDeferredShader::SetWorldViewProj(const XMMATRIX& worldViewProj)
@@ -537,4 +600,37 @@ void SkyDeferredShader::UpdatePerFrame(ID3D11DeviceContext* dc)
 {
 	IShader::UpdateBuffer(dc, mVertexShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_VS);
 	dc->VSSetConstantBuffers(0, 1, &mVertexShaderWrapper.PerFrameBuffer);
+}
+
+ParticleDrawShader::ParticleDrawShader()
+	: IShader()
+{}
+
+ParticleDrawShader::~ParticleDrawShader(){}
+
+bool ParticleDrawShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout, ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader)
+{
+	IShader::Init(device, inputLayout, vertexShader, pixelShader);
+	
+	if (FAILED(IShader::CreateBuffer(device, &mVertexShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_VS)))
+		return false;
+
+	return true;
+}
+
+void ParticleDrawShader::SetViewProj(XMMATRIX& viewProj)
+{
+	mBuffer_PerFrame_VS.viewProj = XMMatrixTranspose(viewProj);
+}
+
+void ParticleDrawShader::UpdatePerFrame(ID3D11DeviceContext* dc)
+{
+	IShader::UpdateBuffer(dc, mVertexShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_VS);
+	dc->VSSetConstantBuffers(0, 1, &mVertexShaderWrapper.PerFrameBuffer);
+}
+
+void ParticleDrawShader::SetActive(ID3D11DeviceContext* dc)
+{
+	IShader::SetActive(dc);
+	dc->PSSetSamplers(0, 1, &RenderStates::mLinearSS);
 }

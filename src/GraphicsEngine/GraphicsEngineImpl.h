@@ -18,6 +18,8 @@
 #include "RenderStates.h"
 #include "common/util.h"
 #include "ParticleSystem.h"
+#include "Common/debug.h"
+#include "CameraControllerImpl.h"
 
 static const enum BlendingMethods
 {
@@ -46,10 +48,16 @@ public:
 	void ResetRenderTargetAndViewport();
 	void SetSkyTexture(const std::string& fileName);
 
+	const float GetFramerate();
+
 	// Text
 	void LoadFont(std::string fontPath, std::string fontName);
-	void PrintText(std::string text, int x, int y, XMFLOAT3 RGB, float scale, float alpha);
+	void PrintText(std::string text, int x, int y, float red, float green, float blue, float scale, float alpha);
 	void SetFont(std::string fontName);
+
+	// Camera controller
+	CameraController* CreateCameraController();
+	void DeleteCameraController(CameraController* camController);
 
 private:
 	Direct3D* mD3D;
@@ -84,7 +92,7 @@ private:
 
 	float mGameTime;
 
-	float mCurFPS;
+	float mCurFramerate;
 	float mTargetFPS;
 
 	UINT mScreenWidth;

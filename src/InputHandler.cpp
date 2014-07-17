@@ -69,7 +69,8 @@ void InputHandler::RemoveListener(InputListener *listener)
 
 void InputHandler::Update()
 {
-	if (m_mouseCaptured && m_window->IsActive()) {
+	if (m_mouseCaptured && m_window->IsActive()) 
+	{
 		POINT point;
 		point.x = m_window->GetWidth() / 2;
 		point.y = m_window->GetHeight() / 2;

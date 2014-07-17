@@ -89,14 +89,16 @@ float4 main(VertexOut pIn) : SV_TARGET
 	//--------------------------------------------------
 	// Lighting
 	//--------------------------------------------------
+	litColor = diffuse;
+	float4 ambient_Lights = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	float4 diffuse_Lights = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	float4 specular_Lights = float4(0.0f, 0.0f, 0.0f, 0.0f);
+
+		if (gSkipLighting == 1)
+			diffuse_Lights = float4(1.0f, 1.0f, 1.0f, 1.0f);
+
 	if (gSkipLighting == 0)
 	{
-		litColor = diffuse;
-
-		float4 ambient_Lights = float4(0.0f, 0.0f, 0.0f, 0.0f);
-		float4 diffuse_Lights = float4(0.0f, 0.0f, 0.0f, 0.0f);
-		float4 specular_Lights = float4(0.0f, 0.0f, 0.0f, 0.0f);
-
 		float4 A, D, S;
 
 		// Begin calculating lights
@@ -123,13 +125,9 @@ float4 main(VertexOut pIn) : SV_TARGET
 			diffuse_Lights += D;
 			specular_Lights += S;
 		}
+	}
 
-		litColor = float4(diffuse.xyz * (ambient_Lights.xyz + diffuse_Lights.xyz) + specular_Lights.xyz, 1.0f);
-	}
-	else
-	{
-		litColor = float4(diffuse.xyz, 1.0f);
-	}
+	litColor = float4(diffuse.xyz * (ambient_Lights.xyz + diffuse_Lights.xyz) + specular_Lights.xyz, 1.0f);
 
 	return litColor;
 }

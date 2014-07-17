@@ -74,7 +74,7 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 	mCamera = new Camera();
 	mCamera->SetLens(fovY, static_cast<float>(width) / height, zNear, zFar);
 	mCamera->UpdateOrthoMatrix(static_cast<float>(width), static_cast<float>(height), zNear, zFar);
-	mCamera->SetPosition(XMFLOAT3(0.0f, 0.0f, -400.0f));
+	mCamera->SetPosition(XMFLOAT3(0.0f, 0.0f, -10.0f));
 	mCamera->UpdateBaseViewMatrix();
 	mCamera->LookAt(XMFLOAT3(0.0f, 0.0f, 0.0f));
 	mCamera->Update();
@@ -101,6 +101,8 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\SkyDeferredPS.cso", "SkyDeferredPS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\LightDeferredPS_ToTexture.cso", "LightDeferredPS_ToTexture", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\SphereParticleSystemCS.cso", "SphereParticleSystemCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledVertexShader(L"..\\shaders\\ParticleDrawVS.cso", "ParticleDrawVS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\ParticleDrawPS.cso", "ParticleDrawPS", mD3D->GetDevice());
 
 	// Now create all the input layouts
 	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("BasicDeferredVS"), InputLayoutDesc::PosNormalTex, COUNT_OF(InputLayoutDesc::PosNormalTex), &mInputLayouts->PosNormalTex);
@@ -124,6 +126,10 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 		mShaderHandler->GetVertexShader("LightDeferredVS"),
 		mShaderHandler->GetPixelShader("LightDeferredPS_ToTexture"));
 
+	mShaderHandler->mParticleDrawShader->Init(mD3D->GetDevice(), NULL,
+		mShaderHandler->GetVertexShader("ParticleDrawVS"),
+		mShaderHandler->GetPixelShader("ParticleDrawPS"));
+
 	mSpriteBatch = new SpriteBatch(mD3D->GetImmediateContext());
 
 	// Create orthogonal window
@@ -131,8 +137,8 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 	mOrthoWindow->Initialize(mD3D->GetDevice(), width, height);
 
 	mSphereParticleSystem = new SphereParticleSystem();
-	mSphereParticleSystem->Init(1.0f, 12, 6, 10000);
-	mSphereParticleSystem->CreateParticles(mD3D->GetDevice(), 10000);
+	mSphereParticleSystem->Init(mD3D->GetDevice(), mShaderHandler->GetComputeShader("SphereParticleSystemCS"), 1.0f, 12, 6, 1048576);
+	mSphereParticleSystem->CreateParticles(mD3D->GetDevice(), 1048576);
 
 	return true;
 }
@@ -171,6 +177,8 @@ void GraphicsEngineImpl::DrawScene()
 	mOrthoWindow->Render(mD3D->GetImmediateContext());
 	mShaderHandler->mLightDeferredShader->SetDiffuseTexture(mD3D->GetImmediateContext(), NULL);
 
+	//PrintText("Particles: " + std::to_string(mSphereParticleSystem->GetNumParticles()), 0, 40, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f);
+
 	//-------------------------------------------------------------------------------------
 	// Restore defaults
 	//-------------------------------------------------------------------------------------
@@ -197,10 +205,15 @@ void GraphicsEngineImpl::DrawScene()
 void GraphicsEngineImpl::UpdateScene(float dt, float gameTime)
 {
 	mGameTime = gameTime;
-	mCurFPS = 1000.0f / dt;
-	mCurFPS = mCurFPS / 1000.0f;
+	mCurFramerate = 1000.0f / dt;
+	mCurFramerate = mCurFramerate / 1000.0f;
+
+	//mCurFramerate = (1000.0f / dt) / 1000.0f;
+	//mCurFramerate = dt;
 
 	mCamera->Update();
+	//mCamera->UpdateViewMatrix();
+	mCamera->Rotate(mCamera->GetYaw(), mCamera->GetPitch());
 
 	mSphereParticleSystem->Update(mD3D->GetImmediateContext(), (double)mGameTime, dt);
 }
@@ -209,6 +222,7 @@ void GraphicsEngineImpl::Present()
 {
 	// Present the back buffer to front buffer
 	// Set SyncInterval to 1 if you want to limit the FPS to the monitors refresh rate
+
 	mD3D->GetSwapChain()->Present(0, 0);
 }
 
@@ -259,14 +273,16 @@ void GraphicsEngineImpl::RenderSceneToTexture()
 	//---------------------------------------------------------------------------------------
 	// Static opaque objects
 	//---------------------------------------------------------------------------------------
-	mShaderHandler->mBasicDeferredShader->SetActive(mD3D->GetImmediateContext());
+// 	mShaderHandler->mBasicDeferredShader->SetActive(mD3D->GetImmediateContext());
+// 
+// 	// Transform NDC space [-1,+1]^2 to texture space [0,1]^2
+// 	XMMATRIX toTexSpace(
+// 		0.5f, 0.0f, 0.0f, 0.0f,
+// 		0.0f, -0.5f, 0.0f, 0.0f,
+// 		0.0f, 0.0f, 1.0f, 0.0f,
+// 		0.5f, 0.5f, 0.0f, 1.0f);
 
-	// Transform NDC space [-1,+1]^2 to texture space [0,1]^2
-	XMMATRIX toTexSpace(
-		0.5f, 0.0f, 0.0f, 0.0f,
-		0.0f, -0.5f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.5f, 0.5f, 0.0f, 1.0f);
+	mSphereParticleSystem->Render(mShaderHandler->mParticleDrawShader, mD3D->GetImmediateContext(), *mCamera);
 
 	// Set render target to light accumulation buffer, also use the depth/stencil buffer with previous stencil information
 	mD3D->GetImmediateContext()->OMSetRenderTargets(1, renderTargetsLitScene, mD3D->GetDepthStencilView());
@@ -282,7 +298,8 @@ void GraphicsEngineImpl::RenderSceneToTexture()
 	mShaderHandler->mLightDeferredToTextureShader->SetSpotLights(mD3D->GetImmediateContext(), (UINT)mSpotLights.size(), mSpotLights.data());
 	mShaderHandler->mLightDeferredToTextureShader->SetCameraViewProjMatrix(mCamera->GetViewMatrix(), mCamera->GetProjMatrix());
 
-	mShaderHandler->mLightDeferredToTextureShader->SetSkipLighting(false);
+	mShaderHandler->mLightDeferredToTextureShader->SetSkipLighting(true);
+	mShaderHandler->mLightDeferredToTextureShader->SetSkipProcessing(true);
 
 	mShaderHandler->mLightDeferredToTextureShader->UpdatePerFrame(mD3D->GetImmediateContext());
 
@@ -360,12 +377,12 @@ void GraphicsEngineImpl::UpdateSceneData()
 }
 
 
-void GraphicsEngineImpl::PrintText(std::string text, int x, int y, XMFLOAT3 RGB, float scale, float alpha)
+void GraphicsEngineImpl::PrintText(std::string text, int x, int y, float red, float green, float blue, float scale, float alpha)
 {
 	if (mCurFont)
 	{
 		std::wstring t = std::wstring(text.begin(), text.end());
-		XMVECTORF32 v_color = { RGB.x, RGB.y, RGB.z, alpha };
+		XMVECTORF32 v_color = { red, green, blue, alpha };
 
 		mSpriteBatch->Begin();
 		mCurFont->DrawString(mSpriteBatch, t.c_str(), XMFLOAT2((float)x, (float)y), v_color, 0.0f, XMFLOAT2(0, 0), scale);
@@ -444,4 +461,22 @@ void GraphicsEngineImpl::SetFont(std::string fontName)
 	{
 		mCurFont = mSpriteFonts[fontName];
 	}
+}
+
+const float GraphicsEngineImpl::GetFramerate()
+{
+	return mCurFramerate;
+}
+
+CameraController* GraphicsEngineImpl::CreateCameraController()
+{
+	CameraController* camController = (CameraController*) new CameraControllerImpl(mCamera);
+
+	return camController;
+}
+
+void GraphicsEngineImpl::DeleteCameraController(CameraController* camController)
+{
+	if (camController)
+		delete camController;
 }

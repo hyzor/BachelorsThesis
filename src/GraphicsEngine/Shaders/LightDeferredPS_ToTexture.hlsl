@@ -101,7 +101,7 @@ PixelOut main(VertexOut pIn)
 		float4 specular_Lights = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
 	if (gSkipLighting == 1)
-		diffuse_Lights = float4(diffuse.x, diffuse.y, diffuse.z, 0.0f);
+		diffuse_Lights = float4(1.0f, 1.0f, 1.0f, 1.0f);
 
 	float4 A, D, S;
 
@@ -139,7 +139,7 @@ PixelOut main(VertexOut pIn)
 	pOut.LitColor = float4(diffuse.xyz * (ambient_Lights.xyz + diffuse_Lights.xyz) + specular_Lights.xyz, 1.0f);
 
 	// Tone mapping
-	//pOut.LitColor.xyz = Uncharted2Tonemap(pOut.LitColor.xyz);
+	pOut.LitColor.xyz = Uncharted2Tonemap(pOut.LitColor.xyz);
 
 	// Gamma encode final lit color
 	pOut.LitColor.xyz = pow(pOut.LitColor.xyz, 1.0f / 2.2f);

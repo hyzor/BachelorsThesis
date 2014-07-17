@@ -27,6 +27,16 @@ public:
 
 	static float GetInfinity();
 	static float GetPi();
+	static float GetGravityConstant();
+
+	template <typename T>
+	static T Lerp(T a, T b, float amount);
 };
+
+template <typename T>
+T MathHelper::Lerp(T a, T b, float amount)
+{
+	return a + (b - a) * amount;
+}
 
 #endif

@@ -10,6 +10,10 @@ Camera::Camera(void)
 	mLook(0.0f, 0.0f, 1.0f)
 {
 	SetLens(0.25f*MathHelper::GetPi(), 1.0f, 1.0f, 1000.0f);
+
+	mYaw = 0.0f;
+	mPitch = 0.0f;
+	mRoll = 0.0f;
 }
 
 
@@ -40,6 +44,11 @@ void Camera::SetPosition( float x, float y, float z )
 void Camera::SetPosition( const XMFLOAT3& v )
 {
 	mPosition = v;
+}
+
+void Camera::SetPosition(const XMVECTOR& v)
+{
+	XMStoreFloat3(&mPosition, v);
 }
 
 XMVECTOR Camera::GetRightXM() const
@@ -166,7 +175,7 @@ void Camera::ComputeFrustum()
 void Camera::LookAt(XMFLOAT3 at)
 {
 	XMVECTOR lookat = XMLoadFloat3(&XMFLOAT3(at.x, at.y, at.z));
-	XMVECTOR up = XMLoadFloat3(&XMFLOAT3(0, 1, 0));
+	XMVECTOR up = XMLoadFloat3(&XMFLOAT3(0.0f, 1.0f, 0.0f));
 	XMVECTOR position = XMLoadFloat3(&XMFLOAT3(mPosition.x, mPosition.y, mPosition.z));
 
 	XMMATRIX view = XMMatrixLookAtLH(position, lookat, up);// D3DXToRadian(degrees));
@@ -258,4 +267,71 @@ void Camera::SetPrevViewProj(XMMATRIX& prevViewProj)
 DirectX::XMMATRIX Camera::GetPreviousViewProj() const
 {
 	return XMLoadFloat4x4(&mPrevViewProj);
+}
+
+void Camera::UpdateViewMatrix()
+{
+	XMVECTOR Up = XMLoadFloat3(&XMFLOAT3(0.0f, 1.0f, 0.0f));
+	XMVECTOR Look = XMLoadFloat3(&XMFLOAT3(0.0f, 0.0f, 1.0f));
+	XMVECTOR Right = XMLoadFloat3(&XMFLOAT3(1.0f, 0.0f, 0.0f));
+	XMVECTOR pos = XMLoadFloat3(&mPosition);
+
+	XMMATRIX yawMatrix = XMMatrixRotationAxis(Up, mYaw);
+	Look = XMVector3TransformCoord(Look, yawMatrix);
+	Right = XMVector3TransformCoord(Right, yawMatrix);
+
+	XMMATRIX pitchMatrix = XMMatrixRotationAxis(Right, mPitch);
+	Look = XMVector3TransformCoord(Look, pitchMatrix);
+	Up = XMVector3TransformCoord(Up, pitchMatrix);
+
+	XMMATRIX rollMatrix = XMMatrixRotationAxis(Look, mRoll);
+	Right = XMVector3TransformCoord(Right, rollMatrix);
+	Up = XMVector3TransformCoord(Up, rollMatrix);
+
+	mView(0, 0) = XMVectorGetX(Right); mView(0, 1) = XMVectorGetX(Up); mView(0, 2) = XMVectorGetX(Look);
+	mView(1, 0) = XMVectorGetY(Right); mView(1, 1) = XMVectorGetY(Up); mView(1, 2) = XMVectorGetY(Look);
+	mView(2, 0) = XMVectorGetZ(Right); mView(2, 1) = XMVectorGetZ(Up); mView(2, 2) = XMVectorGetZ(Look);
+
+	mView(3, 0) = -XMVectorGetX(XMVector3Dot(pos, Right));
+	mView(3, 1) = -XMVectorGetX(XMVector3Dot(pos, Up));
+	mView(3, 2) = -XMVectorGetX(XMVector3Dot(pos, Look));
+
+	mView(0, 3) = 0;
+	mView(1, 3) = 0;
+	mView(2, 3) = 0;
+	mView(3, 3) = 1;
+
+	XMStoreFloat3(&mRight, Right);
+	XMStoreFloat3(&mUp, Up);
+	XMStoreFloat3(&mLook, Look);
+}
+
+void Camera::SetYaw(float yaw)
+{
+	mYaw = yaw;
+}
+
+void Camera::SetPitch(float pitch)
+{
+	mPitch = pitch;
+}
+
+float Camera::GetYaw()
+{
+	return mYaw;
+}
+
+float Camera::GetPitch()
+{
+	return mPitch;
+}
+
+void Camera::SetRoll(float roll)
+{
+	mRoll = roll;
+}
+
+float Camera::GetRoll()
+{
+	return mRoll;
 }

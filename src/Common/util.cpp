@@ -58,5 +58,10 @@ float MathHelper::GetInfinity()
 
 float MathHelper::GetPi()
 {
-	return 3.1415926535f;
+	return (float)M_PI;
+}
+
+float MathHelper::GetGravityConstant()
+{
+	return 9.81f;
 }

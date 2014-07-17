@@ -23,6 +23,7 @@ public:
 
 	void SetPosition(float x, float y, float z);
 	void SetPosition(const XMFLOAT3& v);
+	void SetPosition(const XMVECTOR& v);
 	void SetDirection(XMFLOAT3 direction);
 	void Rotate(float yaw, float pitch);
 
@@ -64,14 +65,20 @@ public:
 	float GetFarWindowWidth() const;
 	float GetFarWindowHeight() const;
 
-	//void UpdateViewMatrix();
+	void UpdateViewMatrix();
 	void UpdateBaseViewMatrix();
+
+	void SetYaw(float yaw);
+	void SetPitch(float pitch);
+	void SetRoll(float roll);
+
+	float GetYaw();
+	float GetPitch();
+	float GetRoll();
 
 	DirectX::BoundingFrustum GetFrustum() const;
 
 	void ComputeFrustum();
-	
-	void Pitch(float);
 
 	void LookAt(XMFLOAT3 at);
 
@@ -98,6 +105,10 @@ private:
 	float mFovY;
 	float mNearWindowHeight;
 	float mFarWindowHeight;
+
+	float mYaw;
+	float mPitch;
+	float mRoll;
 
 	DirectX::BoundingFrustum mFrustum;
 

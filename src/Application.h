@@ -47,6 +47,7 @@ private:
 	InputHandler* m_inputHandler;
 
 	GraphicsEngine* m_graphicsEngine;
+	CameraController* mCameraController;
 
 	std::string mResourceDir;
 };
