@@ -154,6 +154,36 @@
     <FxCompile Include="src\GraphicsEngine\Shaders\ParticleDrawPS.hlsl">
       <Filter>Shaders\Particle system</Filter>
     </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\ParticleDrawGS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\SphereParticleSystem_CollisonCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\BitonicSortCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\MatrixTransposeCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\GridIndicesClearCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\GridIndicesBuildCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\ParticleRearrangeCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\GridBuildCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\ParticleDensityCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
+    <FxCompile Include="src\GraphicsEngine\Shaders\ParticleForcesCS.hlsl">
+      <Filter>Shaders\Particle system</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="src\GraphicsEngine\Shaders\LightDef.hlsli">
@@ -166,6 +196,9 @@
       <Filter>Shaders\Particle system</Filter>
     </None>
     <None Include="src\GraphicsEngine\Shaders\ParticleSystemDef.hlsli">
+      <Filter>Shaders\Particle system</Filter>
+    </None>
+    <None Include="src\GraphicsEngine\Shaders\ParticleSystemCS_Helper.hlsli">
       <Filter>Shaders\Particle system</Filter>
     </None>
   </ItemGroup>

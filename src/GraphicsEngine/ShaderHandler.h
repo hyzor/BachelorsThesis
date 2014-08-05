@@ -50,6 +50,9 @@ public:
 	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout);
 	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
 		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader);
+	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader, ID3D11GeometryShader* geometryShader);
+	bool Init(ID3D11Device* device, ID3D11ComputeShader* computeShader);
 
 	void SetActive(ID3D11DeviceContext* dc);
 
@@ -161,6 +164,53 @@ HRESULT IShader::CreateBuffer(ID3D11Device* device, ID3D11Buffer** buffer, buffe
 
 	// Now create the buffer
 	hr = device->CreateBuffer(&cbDesc, &InitData, buffer);
+
+	return hr;
+}
+
+//--------------------------------------------------------------------------------------
+// Helper for creating structured buffers with an SRV and UAV
+//--------------------------------------------------------------------------------------
+template <class T>
+HRESULT CreateStructuredBuffer(ID3D11Device* pd3dDevice, UINT iNumElements, ID3D11Buffer** ppBuffer, ID3D11ShaderResourceView** ppSRV, ID3D11UnorderedAccessView** ppUAV, const T* pInitialData = nullptr)
+{
+	HRESULT hr = S_OK;
+
+	// Create SB
+	D3D11_BUFFER_DESC bufferDesc;
+	ZeroMemory(&bufferDesc, sizeof(bufferDesc));
+	bufferDesc.ByteWidth = iNumElements * sizeof(T);
+	bufferDesc.Usage = D3D11_USAGE_DEFAULT;
+	bufferDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+	bufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
+	bufferDesc.StructureByteStride = sizeof(T);
+
+	D3D11_SUBRESOURCE_DATA bufferInitData;
+	ZeroMemory(&bufferInitData, sizeof(bufferInitData));
+	bufferInitData.pSysMem = pInitialData;
+	hr = pd3dDevice->CreateBuffer(&bufferDesc, (pInitialData) ? &bufferInitData : nullptr, ppBuffer);
+
+	if (FAILED(hr))
+		return hr;
+
+	// Create SRV
+	D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+	ZeroMemory(&srvDesc, sizeof(srvDesc));
+	srvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
+	srvDesc.Buffer.ElementWidth = iNumElements;
+	hr = pd3dDevice->CreateShaderResourceView(*ppBuffer, &srvDesc, ppSRV);
+
+	if (FAILED(hr))
+		return hr;
+
+	// Create UAV
+	D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
+	ZeroMemory(&uavDesc, sizeof(uavDesc));
+	uavDesc.Format = DXGI_FORMAT_UNKNOWN;
+	uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+	uavDesc.Buffer.NumElements = iNumElements;
+	hr = pd3dDevice->CreateUnorderedAccessView(*ppBuffer, &uavDesc, ppUAV);
 
 	return hr;
 }
@@ -318,8 +368,16 @@ public:
 	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
 		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader);
 
-	void SetViewProj(XMMATRIX& viewProj);
+	bool Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+		ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader,
+		ID3D11GeometryShader* geometryShader);
+
+	void SetViewProj(XMMATRIX& viewProj, XMMATRIX& view, XMMATRIX& proj);
+	void SetEyePos(XMFLOAT3 eyePos);
+	void SetDiffuseTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex);
 	void SetActive(ID3D11DeviceContext* dc);
+
+	void SetParticleRadius(float particleRadius);
 
 	void UpdatePerFrame(ID3D11DeviceContext* dc);
 
@@ -327,9 +385,99 @@ private:
 	struct BUFFER_PERFRAME_VS
 	{
 		XMMATRIX viewProj;
+		float particleRadius;
+		XMFLOAT3 padding;
+	};
+
+	struct BUFFER_PERFRAME_GS
+	{
+		XMMATRIX viewProj;
+		XMMATRIX view;
+		XMMATRIX proj;
+		XMFLOAT3 eyePos;
 	};
 
 	BUFFER_PERFRAME_VS mBuffer_PerFrame_VS;
+	BUFFER_PERFRAME_GS mBuffer_PerFrame_GS;
+};
+
+class BitonicSortShader : public IShader
+{
+public:
+	BitonicSortShader();
+	~BitonicSortShader();
+
+	bool Init(ID3D11Device* device, ID3D11ComputeShader* computeShader);
+	void SetActive(ID3D11DeviceContext* dc);
+
+	void UpdatePerFrame(ID3D11DeviceContext* dc);
+	void SetBuffers(ID3D11DeviceContext* dc);
+
+	void SetLevelProperties(UINT iLevel, UINT iLevelMask);
+
+private:
+	struct BUFFER_PERFRAME_CS
+	{
+		unsigned int g_iLevel;
+		unsigned int g_iLevelMask;
+		XMFLOAT2 padding;
+	};
+
+	BUFFER_PERFRAME_CS mBuffer_PerFrame_CS;
+};
+
+class MatrixTransposeShader : public IShader
+{
+public:
+	MatrixTransposeShader();
+	~MatrixTransposeShader();
+
+	bool Init(ID3D11Device* device, ID3D11ComputeShader* computeShader);
+	void SetActive(ID3D11DeviceContext* dc);
+
+	void UpdatePerFrame(ID3D11DeviceContext* dc);
+	void SetBuffers(ID3D11DeviceContext* dc);
+
+	void SetMatrixProperties(UINT matrixWidth, UINT matrixHeight);
+
+private:
+	struct BUFFER_PERFRAME_CS
+	{
+		unsigned int g_iWidth;
+		unsigned int g_iHeight;
+		XMFLOAT2 padding;
+	};
+
+	BUFFER_PERFRAME_CS mBuffer_PerFrame_CS;
+};
+
+class GridIndicesShader : public IShader
+{
+public:
+	GridIndicesShader();
+	~GridIndicesShader();
+
+	bool Init(ID3D11Device* device, ID3D11ComputeShader* gridBuildShader, ID3D11ComputeShader* gridClearShader);
+	
+	void BuildGridIndices(ID3D11DeviceContext* dc, ID3D11UnorderedAccessView* gridIndicesUAV, ID3D11ShaderResourceView* gridSRV,
+		UINT threadGroupCountX, UINT threadGroupCountY, UINT threadGroupCountZ);
+	void ClearGridIndices(ID3D11DeviceContext* dc, ID3D11UnorderedAccessView* gridIndicesUAV,
+		UINT threadGroupCountX, UINT threadGroupCountY, UINT threadGroupCountZ);
+
+	void SetNumElements(ID3D11DeviceContext* dc, UINT numElements);
+
+private:
+	ID3D11ComputeShader* mBuildShader;
+	ID3D11ComputeShader* mClearShader;
+
+	struct BUFFER_PERFRAME_BUILD_CS
+	{
+		UINT g_iNumElements;
+		XMFLOAT3 padding;
+	};
+
+	BUFFER_PERFRAME_BUILD_CS mBufferVars_PerFrame_Build_CS;
+	ID3D11Buffer* mBuffer_PerFrame_Build_CS;
 };
 
 #pragma region ShaderHandler
@@ -376,6 +524,10 @@ public:
 	SkyDeferredShader* mSkyDeferredShader;
 	LightDeferredShader* mLightDeferredToTextureShader;
 	ParticleDrawShader* mParticleDrawShader;
+
+	BitonicSortShader* mBitonicSortShader;
+	MatrixTransposeShader* mMatrixTransposeShader;
+	GridIndicesShader* mGridIndicesShader;
 
 private:
 	BYTE* LoadByteCode(char* fileName, UINT& size);

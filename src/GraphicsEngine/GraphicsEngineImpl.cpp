@@ -100,9 +100,19 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 	mShaderHandler->LoadCompiledVertexShader(L"..\\shaders\\SkyDeferredVS.cso", "SkyDeferredVS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\SkyDeferredPS.cso", "SkyDeferredPS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\LightDeferredPS_ToTexture.cso", "LightDeferredPS_ToTexture", mD3D->GetDevice());
-	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\SphereParticleSystemCS.cso", "SphereParticleSystemCS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledVertexShader(L"..\\shaders\\ParticleDrawVS.cso", "ParticleDrawVS", mD3D->GetDevice());
 	mShaderHandler->LoadCompiledPixelShader(L"..\\shaders\\ParticleDrawPS.cso", "ParticleDrawPS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledGeometryShader(L"..\\shaders\\ParticleDrawGS.cso", "ParticleDrawGS", mD3D->GetDevice());
+
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\SphereParticleSystemCS.cso", "SphereParticleSystemCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\BitonicSortCS.cso", "BitonicSortCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\MatrixTransposeCS.cso", "MatrixTransposeCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\GridIndicesClearCS.cso", "GridIndicesClearCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\GridIndicesBuildCS.cso", "GridIndicesBuildCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\ParticleRearrangeCS.cso", "ParticleRearrangeCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\GridBuildCS.cso", "GridBuildCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\ParticleForcesCS.cso", "ParticleForcesCS", mD3D->GetDevice());
+	mShaderHandler->LoadCompiledComputeShader(L"..\\shaders\\ParticleDensityCS.cso", "ParticleDensityCS", mD3D->GetDevice());
 
 	// Now create all the input layouts
 	mInputLayouts->CreateInputLayout(mD3D->GetDevice(), mShaderHandler->GetShader("BasicDeferredVS"), InputLayoutDesc::PosNormalTex, COUNT_OF(InputLayoutDesc::PosNormalTex), &mInputLayouts->PosNormalTex);
@@ -126,9 +136,24 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 		mShaderHandler->GetVertexShader("LightDeferredVS"),
 		mShaderHandler->GetPixelShader("LightDeferredPS_ToTexture"));
 
+// 	mShaderHandler->mParticleDrawShader->Init(mD3D->GetDevice(), NULL,
+// 		mShaderHandler->GetVertexShader("ParticleDrawVS"),
+// 		mShaderHandler->GetPixelShader("ParticleDrawPS"));
+
 	mShaderHandler->mParticleDrawShader->Init(mD3D->GetDevice(), NULL,
 		mShaderHandler->GetVertexShader("ParticleDrawVS"),
-		mShaderHandler->GetPixelShader("ParticleDrawPS"));
+		mShaderHandler->GetPixelShader("ParticleDrawPS"),
+		mShaderHandler->GetGeometryShader("ParticleDrawGS"));
+
+	mShaderHandler->mBitonicSortShader->Init(mD3D->GetDevice(),
+		mShaderHandler->GetComputeShader("BitonicSortCS"));
+
+	mShaderHandler->mMatrixTransposeShader->Init(mD3D->GetDevice(),
+		mShaderHandler->GetComputeShader("MatrixTransposeCS"));
+
+	mShaderHandler->mGridIndicesShader->Init(mD3D->GetDevice(),
+		mShaderHandler->GetComputeShader("GridIndicesBuildCS"),
+		mShaderHandler->GetComputeShader("GridIndicesClearCS"));
 
 	mSpriteBatch = new SpriteBatch(mD3D->GetImmediateContext());
 
@@ -136,9 +161,19 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 	mOrthoWindow = new OrthoWindow();
 	mOrthoWindow->Initialize(mD3D->GetDevice(), width, height);
 
+	const UINT particleNum = 1048576;
+
 	mSphereParticleSystem = new SphereParticleSystem();
-	mSphereParticleSystem->Init(mD3D->GetDevice(), mShaderHandler->GetComputeShader("SphereParticleSystemCS"), 1.0f, 12, 6, 1048576);
-	mSphereParticleSystem->CreateParticles(mD3D->GetDevice(), 1048576);
+	//mSphereParticleSystem->Init(mD3D->GetDevice(), mShaderHandler->GetComputeShader("SphereParticleSystemCS"), 1.0f, 12, 6, 1048576);
+	mSphereParticleSystem->Init(mD3D->GetDevice(), mShaderHandler->GetComputeShader("SphereParticleSystemCS"),
+		mTextureMgr->CreateTexture(mResourceDir + "Textures\\Sphere_transparent.png"), 0.5f, 12, 6, particleNum,
+		mShaderHandler->mBitonicSortShader, mShaderHandler->mMatrixTransposeShader, mShaderHandler->mGridIndicesShader,
+		mShaderHandler->GetComputeShader("ParticleRearrangeCS"), mShaderHandler->GetComputeShader("GridBuildCS"),
+		mShaderHandler->GetComputeShader("ParticleForcesCS"), mShaderHandler->GetComputeShader("ParticleDensityCS"));
+
+	mSphereParticleSystem->SetFluidBehaviorProperties(0.012f, 200.0f, 1000.0f, 0.0002f, 0.1f);
+
+	mSphereParticleSystem->CreateParticles(mD3D->GetDevice(), mD3D->GetImmediateContext(), particleNum);
 
 	return true;
 }

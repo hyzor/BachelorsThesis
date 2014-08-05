@@ -48,6 +48,10 @@ ShaderHandler::~ShaderHandler()
 	delete mSkyDeferredShader;
 	delete mLightDeferredToTextureShader;
 	delete mParticleDrawShader;
+
+	delete mBitonicSortShader;
+	delete mMatrixTransposeShader;
+	delete mGridIndicesShader;
 }
 
 void ShaderHandler::LoadCompiledVertexShader(LPCWSTR fileName, char* name, ID3D11Device* device)
@@ -288,6 +292,10 @@ bool ShaderHandler::Init()
 	mLightDeferredToTextureShader = new LightDeferredShader();
 	mParticleDrawShader = new ParticleDrawShader();
 
+	mBitonicSortShader = new BitonicSortShader();
+	mMatrixTransposeShader = new MatrixTransposeShader();
+	mGridIndicesShader = new GridIndicesShader();
+
 	return true;
 }
 #pragma endregion ShaderHandler
@@ -318,12 +326,35 @@ bool IShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout)
 	return true;
 }
 
-bool IShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout, ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader)
+bool IShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+	ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader)
 {
 	Init(device, inputLayout);
 
 	mVertexShaderWrapper.VertexShader = vertexShader;
 	mPixelShaderWrapper.PixelShader = pixelShader;
+
+	return true;
+}
+
+bool IShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+	ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader, ID3D11GeometryShader* geometryShader)
+{
+	Init(device, inputLayout);
+
+	mVertexShaderWrapper.VertexShader = vertexShader;
+	mPixelShaderWrapper.PixelShader = pixelShader;
+	mGeometryShaderWrapper.GeometryShader = geometryShader;
+
+	return true;
+}
+
+bool IShader::Init(ID3D11Device* device, ID3D11ComputeShader* computeShader)
+{
+	ID3D11InputLayout* layout = nullptr;
+	Init(device, layout);
+
+	mComputeShaderWrapper.ComputeShader = computeShader;
 
 	return true;
 }
@@ -363,6 +394,7 @@ void IShader::SetActive(ID3D11DeviceContext* dc)
 
 	if (mComputeShaderWrapper.ComputeShader)
 	{
+		dc->CSSetShader(mComputeShaderWrapper.ComputeShader, nullptr, 0);
 		dc->CSSetShaderResources(0, 16, nullSRV);
 	}
 	else
@@ -618,19 +650,195 @@ bool ParticleDrawShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayo
 	return true;
 }
 
-void ParticleDrawShader::SetViewProj(XMMATRIX& viewProj)
+bool ParticleDrawShader::Init(ID3D11Device* device, ID3D11InputLayout* inputLayout,
+	ID3D11VertexShader* vertexShader, ID3D11PixelShader* pixelShader, ID3D11GeometryShader* geometryShader)
+{
+	IShader::Init(device, inputLayout, vertexShader, pixelShader, geometryShader);
+
+	if (FAILED(IShader::CreateBuffer(device, &mVertexShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_VS)))
+		return false;
+
+	if (FAILED(IShader::CreateBuffer(device, &mGeometryShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_GS)))
+		return false;
+
+	return true;
+}
+
+void ParticleDrawShader::SetViewProj(XMMATRIX& viewProj, XMMATRIX& view, XMMATRIX& proj)
 {
 	mBuffer_PerFrame_VS.viewProj = XMMatrixTranspose(viewProj);
+	mBuffer_PerFrame_GS.viewProj = XMMatrixTranspose(viewProj);
+	mBuffer_PerFrame_GS.view = XMMatrixTranspose(view);
+	mBuffer_PerFrame_GS.proj = XMMatrixTranspose(proj);
 }
 
 void ParticleDrawShader::UpdatePerFrame(ID3D11DeviceContext* dc)
 {
 	IShader::UpdateBuffer(dc, mVertexShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_VS);
 	dc->VSSetConstantBuffers(0, 1, &mVertexShaderWrapper.PerFrameBuffer);
+
+	IShader::UpdateBuffer(dc, mGeometryShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_GS);
+	dc->GSSetConstantBuffers(0, 1, &mGeometryShaderWrapper.PerFrameBuffer);
 }
 
 void ParticleDrawShader::SetActive(ID3D11DeviceContext* dc)
 {
 	IShader::SetActive(dc);
+
 	dc->PSSetSamplers(0, 1, &RenderStates::mLinearSS);
+}
+
+void ParticleDrawShader::SetEyePos(XMFLOAT3 eyePos)
+{
+	mBuffer_PerFrame_GS.eyePos = eyePos;
+}
+
+void ParticleDrawShader::SetDiffuseTexture(ID3D11DeviceContext* dc, ID3D11ShaderResourceView* tex)
+{
+	dc->PSSetShaderResources(0, 1, &tex);
+}
+
+void ParticleDrawShader::SetParticleRadius(float particleRadius)
+{
+	mBuffer_PerFrame_VS.particleRadius = particleRadius;
+}
+
+BitonicSortShader::BitonicSortShader()
+	: IShader()
+{}
+
+BitonicSortShader::~BitonicSortShader(){}
+
+bool BitonicSortShader::Init(ID3D11Device* device, ID3D11ComputeShader* computeShader)
+{
+	IShader::Init(device, computeShader);
+
+	if (FAILED(IShader::CreateBuffer(device, &mComputeShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_CS)))
+		return false;
+
+	return true;
+}
+
+void BitonicSortShader::SetActive(ID3D11DeviceContext* dc)
+{
+	IShader::SetActive(dc);
+}
+
+void BitonicSortShader::UpdatePerFrame(ID3D11DeviceContext* dc)
+{
+	IShader::UpdateBuffer(dc, mComputeShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_CS);
+	dc->CSSetConstantBuffers(0, 1, &mComputeShaderWrapper.PerFrameBuffer);
+}
+
+void BitonicSortShader::SetLevelProperties(UINT iLevel, UINT iLevelMask)
+{
+	mBuffer_PerFrame_CS.g_iLevel = iLevel;
+	mBuffer_PerFrame_CS.g_iLevelMask = iLevelMask;
+}
+
+void BitonicSortShader::SetBuffers(ID3D11DeviceContext* dc)
+{
+	dc->CSSetConstantBuffers(0, 1, &mComputeShaderWrapper.PerFrameBuffer);
+}
+
+void MatrixTransposeShader::SetMatrixProperties(UINT matrixWidth, UINT matrixHeight)
+{
+	mBuffer_PerFrame_CS.g_iWidth = matrixWidth;
+	mBuffer_PerFrame_CS.g_iHeight = matrixHeight;
+}
+
+MatrixTransposeShader::MatrixTransposeShader()
+	: IShader()
+{}
+
+MatrixTransposeShader::~MatrixTransposeShader(){}
+
+bool MatrixTransposeShader::Init(ID3D11Device* device, ID3D11ComputeShader* computeShader)
+{
+	IShader::Init(device, computeShader);
+
+	if (FAILED(IShader::CreateBuffer(device, &mComputeShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_CS)))
+		return false;
+
+	return true;
+}
+
+void MatrixTransposeShader::SetActive(ID3D11DeviceContext* dc)
+{
+	IShader::SetActive(dc);
+}
+
+void MatrixTransposeShader::UpdatePerFrame(ID3D11DeviceContext* dc)
+{
+	IShader::UpdateBuffer(dc, mComputeShaderWrapper.PerFrameBuffer, &mBuffer_PerFrame_CS);
+	dc->CSSetConstantBuffers(0, 1, &mComputeShaderWrapper.PerFrameBuffer);
+}
+
+void MatrixTransposeShader::SetBuffers(ID3D11DeviceContext* dc)
+{
+	dc->CSSetConstantBuffers(0, 1, &mComputeShaderWrapper.PerFrameBuffer);
+}
+
+GridIndicesShader::GridIndicesShader()
+	: IShader()
+{
+
+}
+
+GridIndicesShader::~GridIndicesShader()
+{
+	ReleaseCOM(mBuffer_PerFrame_Build_CS);
+}
+
+bool GridIndicesShader::Init(ID3D11Device* device, ID3D11ComputeShader* gridBuildShader, ID3D11ComputeShader* gridClearShader)
+{
+	ID3D11InputLayout* inputLayout = nullptr;
+
+	IShader::Init(device, inputLayout);
+
+	mBuildShader = gridBuildShader;
+	mClearShader = gridClearShader;
+
+	ZeroMemory(&mBufferVars_PerFrame_Build_CS, sizeof(mBufferVars_PerFrame_Build_CS));
+
+	if (FAILED(IShader::CreateBuffer(device, &mBuffer_PerFrame_Build_CS, &mBufferVars_PerFrame_Build_CS)))
+		return false;
+
+	return true;
+}
+
+void GridIndicesShader::BuildGridIndices(ID3D11DeviceContext* dc,
+	ID3D11UnorderedAccessView* gridIndicesUAV, ID3D11ShaderResourceView* gridSRV,
+	UINT threadGroupCountX, UINT threadGroupCountY, UINT threadGroupCountZ)
+{
+	UINT UAVInitialCounts = 0;
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	ID3D11UnorderedAccessView* nullUAV = nullptr;
+
+	dc->CSSetUnorderedAccessViews(0, 1, &gridIndicesUAV, &UAVInitialCounts);
+	dc->CSSetShaderResources(0, 1, &gridSRV);
+	dc->CSSetShader(mBuildShader, nullptr, 0);
+	dc->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
+	dc->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
+	dc->CSSetShaderResources(0, 1, &nullSRV);
+}
+
+void GridIndicesShader::ClearGridIndices(ID3D11DeviceContext* dc, ID3D11UnorderedAccessView* gridIndicesUAV,
+	UINT threadGroupCountX, UINT threadGroupCountY, UINT threadGroupCountZ)
+{
+	UINT UAVInitialCounts = 0;
+	ID3D11ShaderResourceView* nullSRV = nullptr;
+	ID3D11UnorderedAccessView* nullUAV = nullptr;
+
+	dc->CSSetConstantBuffers(0, 1, &mBuffer_PerFrame_Build_CS);
+	dc->CSSetUnorderedAccessViews(0, 1, &gridIndicesUAV, &UAVInitialCounts);
+	dc->CSSetShader(mClearShader, nullptr, 0);
+	dc->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
+	dc->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
+}
+
+void GridIndicesShader::SetNumElements(ID3D11DeviceContext* dc, UINT numElements)
+{
+	mBufferVars_PerFrame_Build_CS.g_iNumElements = numElements;
+	IShader::UpdateBuffer(dc, mBuffer_PerFrame_Build_CS, &mBufferVars_PerFrame_Build_CS);
 }

@@ -31,6 +31,19 @@ public:
 
 	template <typename T>
 	static T Lerp(T a, T b, float amount);
+
+	struct UINT2
+	{
+		UINT x;
+		UINT y;
+	};
+
+	struct UINT3
+	{
+		UINT x;
+		UINT y;
+		UINT z;
+	};
 };
 
 template <typename T>
