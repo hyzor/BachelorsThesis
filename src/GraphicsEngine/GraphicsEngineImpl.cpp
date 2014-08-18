@@ -15,7 +15,11 @@ GraphicsEngineImpl::~GraphicsEngineImpl()
 	// Clean up materials and lights
 	mMaterials.clear();
 	mPointLights.clear();
+
+	for (UINT i = 0; i < mDirLights.size(); ++i)
+		delete mDirLights[i];
 	mDirLights.clear();
+
 	mSpotLights.clear();
 
 	// Clean up fonts
@@ -151,29 +155,43 @@ bool GraphicsEngineImpl::Init(HWND hWindow, UINT width, UINT height, const std::
 	mShaderHandler->mMatrixTransposeShader->Init(mD3D->GetDevice(),
 		mShaderHandler->GetComputeShader("MatrixTransposeCS"));
 
-	mShaderHandler->mGridIndicesShader->Init(mD3D->GetDevice(),
-		mShaderHandler->GetComputeShader("GridIndicesBuildCS"),
-		mShaderHandler->GetComputeShader("GridIndicesClearCS"));
+// 	mShaderHandler->mGridIndicesShader->Init(mD3D->GetDevice(),
+// 		mShaderHandler->GetComputeShader("GridIndicesBuildCS"),
+// 		mShaderHandler->GetComputeShader("GridIndicesClearCS"));
 
 	mSpriteBatch = new SpriteBatch(mD3D->GetImmediateContext());
 
 	// Create orthogonal window
 	mOrthoWindow = new OrthoWindow();
 	mOrthoWindow->Initialize(mD3D->GetDevice(), width, height);
-
-	const UINT particleNum = 1048576;
+	
+	const UINT particleNum = 64 * 1024;
+	const float particleRadius = 1.0f;
 
 	mSphereParticleSystem = new SphereParticleSystem();
 	//mSphereParticleSystem->Init(mD3D->GetDevice(), mShaderHandler->GetComputeShader("SphereParticleSystemCS"), 1.0f, 12, 6, 1048576);
 	mSphereParticleSystem->Init(mD3D->GetDevice(), mShaderHandler->GetComputeShader("SphereParticleSystemCS"),
-		mTextureMgr->CreateTexture(mResourceDir + "Textures\\Sphere_transparent.png"), 0.5f, 12, 6, particleNum,
-		mShaderHandler->mBitonicSortShader, mShaderHandler->mMatrixTransposeShader, mShaderHandler->mGridIndicesShader,
-		mShaderHandler->GetComputeShader("ParticleRearrangeCS"), mShaderHandler->GetComputeShader("GridBuildCS"),
-		mShaderHandler->GetComputeShader("ParticleForcesCS"), mShaderHandler->GetComputeShader("ParticleDensityCS"));
+		mTextureMgr->CreateTexture(mResourceDir + "Textures\\Sphere_transparent.png"), particleRadius, 12, 6, particleNum);
 
-	mSphereParticleSystem->SetFluidBehaviorProperties(0.012f, 200.0f, 1000.0f, 0.0002f, 0.1f);
+	mSphereParticleSystem->SetShaders(mShaderHandler->mBitonicSortShader, mShaderHandler->mMatrixTransposeShader,
+		mShaderHandler->GetComputeShader("ParticleRearrangeCS"), mShaderHandler->GetComputeShader("GridBuildCS"),
+		mShaderHandler->GetComputeShader("ParticleForcesCS"), mShaderHandler->GetComputeShader("ParticleDensityCS"),
+		mShaderHandler->GetComputeShader("GridIndicesClearCS"), mShaderHandler->GetComputeShader("GridIndicesBuildCS"));
+
+	//mSphereParticleSystem->SetFluidBehaviorProperties(0.012f, 200.0f, 1000.0f, 0.0002f, 0.1f);
+	//mSphereParticleSystem->SetFluidBehaviorProperties(1.414213f, 200.0f, 1000.0f, 0.55f, 0.010f);
+	mSphereParticleSystem->SetFluidBehaviorProperties(particleRadius * 2.0f, 100.25f, 1.5f, 0.75f, 0.1f);
+
+	//mSphereParticleSystem->SetFluidBehaviorProperties(0.15f, 200.0f, 1000.0f, 0.0002f, 0.1f);
 
 	mSphereParticleSystem->CreateParticles(mD3D->GetDevice(), mD3D->GetImmediateContext(), particleNum);
+
+	DirLight* dirLight = new DirLight();
+	dirLight->Ambient = XMFLOAT4(0.6f, 0.6f, 0.6f, 1.0f);
+	dirLight->Specular = XMFLOAT4(0.1f, 0.1f, 0.1f, 1.0f);
+	dirLight->Diffuse = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	dirLight->Direction = XMFLOAT3(0.577f, 0.577f, 0.577f);
+	mDirLights.push_back(dirLight);
 
 	return true;
 }
@@ -198,7 +216,7 @@ void GraphicsEngineImpl::DrawScene()
 	mD3D->GetImmediateContext()->ClearDepthStencilView(mD3D->GetDepthStencilView(), D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 	mD3D->GetImmediateContext()->RSSetViewports(1, &mD3D->GetScreenViewport());
 
-	// Render the scene to the render buffers and light it up
+	// Render the scene to the render buffers and give it light
 	RenderSceneToTexture();
 
 	ID3D11ShaderResourceView* finalSRV = mDeferredBuffers->GetLitSceneSRV();
@@ -333,8 +351,8 @@ void GraphicsEngineImpl::RenderSceneToTexture()
 	mShaderHandler->mLightDeferredToTextureShader->SetSpotLights(mD3D->GetImmediateContext(), (UINT)mSpotLights.size(), mSpotLights.data());
 	mShaderHandler->mLightDeferredToTextureShader->SetCameraViewProjMatrix(mCamera->GetViewMatrix(), mCamera->GetProjMatrix());
 
-	mShaderHandler->mLightDeferredToTextureShader->SetSkipLighting(true);
-	mShaderHandler->mLightDeferredToTextureShader->SetSkipProcessing(true);
+	mShaderHandler->mLightDeferredToTextureShader->SetSkipLighting(false);
+	mShaderHandler->mLightDeferredToTextureShader->SetSkipProcessing(false);
 
 	mShaderHandler->mLightDeferredToTextureShader->UpdatePerFrame(mD3D->GetImmediateContext());
 

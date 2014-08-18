@@ -41,99 +41,81 @@ StructuredBuffer<ParticleForces> ParticlesForces : register(t1);
 //RWStructuredBuffer<unsigned int> Grid : register(u1); // Grid with hash and value (particle ID) pairs
 
 [numthreads(BLOCKSIZE, 1, 1)]
-void main(uint3 groupID : SV_GroupID, uint groupIndex : SV_GroupIndex)
-//void main(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex)
+//void main(uint3 groupID : SV_GroupID, uint groupIndex : SV_GroupIndex)
+void main(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex)
 {
 	// Calculate the ID of this thread
-	uint ID = groupID.x * BLOCKSIZE + groupID.y * groupDimX * BLOCKSIZE + groupID.z * groupDimX * groupDimY * BLOCKSIZE + groupIndex;
+	//uint ID = groupID.x * BLOCKSIZE + groupID.y * groupDimX * BLOCKSIZE + groupID.z * groupDimX * groupDimY * BLOCKSIZE + groupIndex;
 
-	//const unsigned int ID = DTid.x;
+	const unsigned int ID = DTid.x;
 
 	// Every thread renders a particle, check if the ID is less than the number of particles
 	if (ID < numParticles)
 	{
+		// DEM/SPH
 		float3 position = ParticlesRO[ID].position;
 		float3 velocity = ParticlesRO[ID].velocity;
 		float3 acceleration = ParticlesForces[ID].acceleration;
-
-			/*
-
-			// Get the current particle from the buffer
-			//SphereParticle p = srcParticleBuffer[ID];
-
-			// Update (or predict particle position), acceleration is based on gravity times particle time
-			//float3 acceleration = float3(0.0f, -gravity * p.time, 0.0f) / p.mass;
-			float3 oldVelocity = p.velocity;
-
-			// Update velocity and position
-			p.velocity = p.velocity + p.acceleration * dt;
-			p.position = p.position + (oldVelocity + p.velocity) * 0.5f * dt;
-
-			p.acceleration = p.acceleration + float3(0.0f, -(gravity), 0.0f);
-			//p.acceleration.y = p.acceleration.y - gravity;
-			p.time += dt;
-			*/
-
 		acceleration = acceleration + float3(0.0f, -(gravity), 0.0f);
-		//acceleration = float3(0.0f, 0.0f, 0.0f);
-		//velocity = srcParticleBuffer[ID].velocity;
-		//position = srcParticleBuffer[ID].position;
+
+		// Gravity only
+		//float3 position = srcParticleBuffer[ID].position;
+		//float3 velocity = srcParticleBuffer[ID].velocity;
+		//float3 acceleration = float3(0.0f, -(gravity), 0.0f);
 
 		float3 oldVelocity = velocity;
 
 		velocity = velocity + acceleration * dt;
 		position = position + (oldVelocity + velocity) * 0.5f * dt;
 
-		/*
-		float boundaryDamping = -0.85f;
+		float boundaryDamping = -0.225f;
 
-		if (p.position.x > boundaries.x)
+		if (position.x > boundaries.x)
 		{
-			p.position.x = boundaries.x;
+			position.x = boundaries.x;
 			//p.velocity.x = p.velocity.x * -1.0f;
-			p.velocity.x = p.velocity.x * boundaryDamping;
+			velocity.x = velocity.x * boundaryDamping;
 			//p.time = 0.0f;
 		}
-		else if (p.position.x < -boundaries.x)
+		else if (position.x < -boundaries.x)
 		{
-			p.position.x = -boundaries.x;
-			p.velocity.x = p.velocity.x * boundaryDamping;
+			position.x = -boundaries.x;
+			velocity.x = velocity.x * boundaryDamping;
 			//p.velocity.x = p.velocity.x * -1.0f;
 			//p.time = 0.0f;
 		}
 
-		if (p.position.y > boundaries.y)
+		if (position.y > boundaries.y)
 		{
-			p.position.y = boundaries.y;
-			p.velocity.y = p.velocity.y * boundaryDamping;
+			position.y = boundaries.y;
+			velocity.y = velocity.y * boundaryDamping;
 			//p.velocity.y = p.velocity.y * -1.0f;
 			//p.time = 0.0f;
 		}
-		else if (p.position.y < -boundaries.y)
+		else if (position.y < -boundaries.y)
 		{
-			p.position.y = -boundaries.y;
-			p.velocity.y = p.velocity.y * boundaryDamping;
+			position.y = -boundaries.y;
+			velocity.y = velocity.y * boundaryDamping;
 			//p.acceleration.y = (p.acceleration.y / p.mass) * -1.0f;
 			//p.velocity.y = p.velocity.y * -1.0f;
 			//p.time = 0.0f;
 		}
 
-		if (p.position.z > boundaries.z)
+		if (position.z > boundaries.z)
 		{
-			p.position.z = boundaries.z;
-			p.velocity.z = p.velocity.z * boundaryDamping;
+			position.z = boundaries.z;
+			velocity.z = velocity.z * boundaryDamping;
 			//p.time = 0.0f;
 		}
-		else if (p.position.z < -boundaries.z)
+		else if (position.z < -boundaries.z)
 		{
-			p.position.z = -boundaries.z;
-			p.velocity.z = p.velocity.z * boundaryDamping;
+			position.z = -boundaries.z;
+			velocity.z = velocity.z * boundaryDamping;
 
 			//float dist = dot(p.position, float3(0.0f, 0.0f, -boundaries.z));
 			//p.acceleration += min(dist, 0) * -3000.0f;
 			//p.time = 0.0f;
 		}
-		*/
 		
 		// g_fWallStiffness = 3000.0f
 

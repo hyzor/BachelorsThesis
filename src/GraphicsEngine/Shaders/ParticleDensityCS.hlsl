@@ -6,13 +6,22 @@ cbuffer cbConstants : register(b0)
 {
 	float g_fSmoothlen;
 	float g_fDensityCoef;
-	//float2 padding;
+	float2 padding;
 
 	float3 originPosW;
+	float padding2;
+
 	uint3 gridSize;
+	float padding3;
+
 	float3 cellSize;
-	float padding;
+	float padding4;
 };
+
+StructuredBuffer<Particle> Particles : register(t0);
+RWStructuredBuffer<ParticleDensity> ParticlesDensity : register(u0);
+
+StructuredBuffer<uint2> GridIndices : register(t1);
 
 //--------------------------------------------------------------------------------------
 // Density Calculation
@@ -27,23 +36,50 @@ float CalculateDensity(float r_sq)
 	return g_fDensityCoef * (h_sq - r_sq) * (h_sq - r_sq) * (h_sq - r_sq);
 }
 
-StructuredBuffer<Particle> Particles : register(t0);
-RWStructuredBuffer<ParticleDensity> ParticlesDensity : register(u0);
-
-StructuredBuffer<uint2> GridIndices : register(t1);
-
 [numthreads(BLOCKSIZE, 1, 1)]
-void main(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex)
+void main(uint3 Gid : SV_GroupID, uint3 DTid : SV_DispatchThreadID,
+	uint3 GTid : SV_GroupThreadID, uint GI : SV_GroupIndex)
 {
 	const unsigned int ID = DTid.x;
 	const float h_sq = g_fSmoothlen * g_fSmoothlen;
 	float3 position = Particles[ID].position;
 
-	float density = 0;
+	float density = 0.0f;
 
-	// Calculate the density based on neighbors from the 8 adjacent cells and current cell
+	// Calculate the density based on neighbors from the 8 adjacent cells
+	// and current cell
 	int3 gridPos = CalcGridPos(position, originPosW, cellSize);
 	uint gridHash = CalcGridHash(gridPos, gridSize);
+
+	// Iterate through every neighboring cell (including the current cell)
+	for (int z = -1; z <= 1; ++z)
+	{
+		for (int y = -1; y <= 1; ++y)
+		{
+			for (int x = -1; x <= 1; ++x)
+			{
+				int3 neighborGridPos = gridPos + int3(x, y, z);
+				uint neighborGridHash = CalcGridHash(
+				neighborGridPos,
+				gridSize);
+
+				uint2 start_end = GridIndices[neighborGridHash];
+
+				for (unsigned int i = start_end.x; i < start_end.y; ++i)
+				{
+					float3 neighborPos = Particles[i].position;
+
+					float3 diff = neighborPos - position;
+					float r_sq = dot(diff, diff);
+
+					if (r_sq < h_sq)
+					{
+							density += CalculateDensity(r_sq);
+					}
+				}
+			}
+		}
+	}
 
 	// Update density with the calculated one
 	ParticlesDensity[ID].density = density;

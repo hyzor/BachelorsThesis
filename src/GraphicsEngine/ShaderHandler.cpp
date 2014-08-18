@@ -51,7 +51,7 @@ ShaderHandler::~ShaderHandler()
 
 	delete mBitonicSortShader;
 	delete mMatrixTransposeShader;
-	delete mGridIndicesShader;
+	//delete mGridIndicesShader;
 }
 
 void ShaderHandler::LoadCompiledVertexShader(LPCWSTR fileName, char* name, ID3D11Device* device)
@@ -294,7 +294,7 @@ bool ShaderHandler::Init()
 
 	mBitonicSortShader = new BitonicSortShader();
 	mMatrixTransposeShader = new MatrixTransposeShader();
-	mGridIndicesShader = new GridIndicesShader();
+	//mGridIndicesShader = new GridIndicesShader();
 
 	return true;
 }
@@ -721,7 +721,8 @@ bool BitonicSortShader::Init(ID3D11Device* device, ID3D11ComputeShader* computeS
 
 void BitonicSortShader::SetActive(ID3D11DeviceContext* dc)
 {
-	IShader::SetActive(dc);
+	dc->CSSetShader(mComputeShaderWrapper.ComputeShader, nullptr, 0);
+	//IShader::SetActive(dc);
 }
 
 void BitonicSortShader::UpdatePerFrame(ID3D11DeviceContext* dc)
@@ -765,7 +766,8 @@ bool MatrixTransposeShader::Init(ID3D11Device* device, ID3D11ComputeShader* comp
 
 void MatrixTransposeShader::SetActive(ID3D11DeviceContext* dc)
 {
-	IShader::SetActive(dc);
+	dc->CSSetShader(mComputeShaderWrapper.ComputeShader, nullptr, 0);
+	//IShader::SetActive(dc);
 }
 
 void MatrixTransposeShader::UpdatePerFrame(ID3D11DeviceContext* dc)
@@ -816,6 +818,7 @@ void GridIndicesShader::BuildGridIndices(ID3D11DeviceContext* dc,
 	ID3D11UnorderedAccessView* nullUAV = nullptr;
 
 	dc->CSSetUnorderedAccessViews(0, 1, &gridIndicesUAV, &UAVInitialCounts);
+	dc->CSSetConstantBuffers(0, 1, &mBuffer_PerFrame_Build_CS);
 	dc->CSSetShaderResources(0, 1, &gridSRV);
 	dc->CSSetShader(mBuildShader, nullptr, 0);
 	dc->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
@@ -830,7 +833,6 @@ void GridIndicesShader::ClearGridIndices(ID3D11DeviceContext* dc, ID3D11Unordere
 	ID3D11ShaderResourceView* nullSRV = nullptr;
 	ID3D11UnorderedAccessView* nullUAV = nullptr;
 
-	dc->CSSetConstantBuffers(0, 1, &mBuffer_PerFrame_Build_CS);
 	dc->CSSetUnorderedAccessViews(0, 1, &gridIndicesUAV, &UAVInitialCounts);
 	dc->CSSetShader(mClearShader, nullptr, 0);
 	dc->Dispatch(threadGroupCountX, threadGroupCountY, threadGroupCountZ);
@@ -841,4 +843,14 @@ void GridIndicesShader::SetNumElements(ID3D11DeviceContext* dc, UINT numElements
 {
 	mBufferVars_PerFrame_Build_CS.g_iNumElements = numElements;
 	IShader::UpdateBuffer(dc, mBuffer_PerFrame_Build_CS, &mBufferVars_PerFrame_Build_CS);
+}
+
+ID3D11ComputeShader* GridIndicesShader::GetClearShader()
+{
+	return mClearShader;
+}
+
+ID3D11ComputeShader* GridIndicesShader::GetBuildShader()
+{
+	return mBuildShader;
 }

@@ -75,6 +75,8 @@ void Application::Update(float dt, float gameTime)
 	m_graphicsEngine->UpdateScene(dt, gameTime);
 	m_graphicsEngine->DrawScene();
 	mCameraController->Update(dt);
+
+	/*
 	m_graphicsEngine->PrintText("Frame rate: " + std::to_string(m_graphicsEngine->GetFramerate()), 0, 0, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f);
 
 	std::string camPosStr = "Pos: " + std::to_string(mCameraController->GetPosition().x) + " "
@@ -84,6 +86,7 @@ void Application::Update(float dt, float gameTime)
 	std::string camLookStr = "Dir: " + std::to_string(mCameraController->GetLook().x) + " "
 		+ std::to_string(mCameraController->GetLook().y) + " " + std::to_string(mCameraController->GetLook().z);
 	m_graphicsEngine->PrintText(camLookStr, 0, 40, 1.0f, 1.0f, 1.0f, 1.0, 1.0f);
+	*/
 }
 
 void Application::OnWindowShouldClose()

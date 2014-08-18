@@ -8,9 +8,15 @@
 #include "Camera.h"
 
 #define BLOCKSIZE 1024
-#define BITONIC_BLOCK_SIZE 512
+#define BITONIC_BLOCK_SIZE 1024
 #define TRANSPOSE_BLOCK_SIZE 16
-#define GRID_NUM_INDICES 16777216 // 256 * 256 * 256
+
+//#define GRID_NUM_INDICES 65536 // 256 * 256
+//#define GRID_NUM_INDICES 262144 // 64 * 64 * 64 (Grid dimension, the total number of cells)
+//#define GRID_NUM_INDICES 32768 // 32 * 32 * 32
+//#define GRID_NUM_INDICES 65536
+#define GRID_SIZE 64
+#define GRID_NUM_INDICES (GRID_SIZE * GRID_SIZE * GRID_SIZE)
 
 struct ParticleDensity
 {
@@ -111,12 +117,13 @@ public:
 	void Init(ID3D11Device* device, ID3D11ComputeShader* computeShader, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> particleSRV, float sphereRadius,
 		int numSphereSlices, int numSphereStacks, UINT maxParticles);
 
-	void Init(ID3D11Device* device, ID3D11ComputeShader* computeShader,
-		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> particleSRV, float sphereRadius,
-		int numSphereSlices, int numSphereStacks, UINT maxParticles,
-		BitonicSortShader* sortShader, MatrixTransposeShader* transposeShader, GridIndicesShader* gridIndicesShader,
-		ID3D11ComputeShader* particleRearrangeShader, ID3D11ComputeShader* gridBuildShader,
-		ID3D11ComputeShader* particleForcesShader, ID3D11ComputeShader* particleDensityShader);
+// 	void Init(ID3D11Device* device, ID3D11ComputeShader* computeShader,
+// 		Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> particleSRV, float sphereRadius,
+// 		int numSphereSlices, int numSphereStacks, UINT maxParticles);
+
+	void SetShaders(BitonicSortShader* sortShader, MatrixTransposeShader* transposeShader, ID3D11ComputeShader* particleRearrangeShader,
+		ID3D11ComputeShader* gridBuildShader, ID3D11ComputeShader* particleForcesShader, ID3D11ComputeShader* particleDensityShader,
+		ID3D11ComputeShader* gridIndicesClearShader, ID3D11ComputeShader* gridIndicesBuildShader);
 
 	void SetFluidBehaviorProperties(FLOAT smoothlen, FLOAT pressureStiffnes, FLOAT restDensity, FLOAT particleMass, FLOAT viscosity);
 
@@ -230,6 +237,25 @@ private:
 	ID3D11ShaderResourceView*           mParticleDensitySRV;
 	ID3D11UnorderedAccessView*          mParticleDensityUAV;
 
+	// Grid particle hash
+	ID3D11Buffer*                       mGridParticleHash;
+	ID3D11ShaderResourceView*           mGridParticleHashSRV;
+	ID3D11UnorderedAccessView*          mGridParticleHashUAV;
+
+	// Grid particle index
+	ID3D11Buffer*                       mGridParticleIndex;
+	ID3D11ShaderResourceView*           mGridParticleIndexSRV;
+	ID3D11UnorderedAccessView*          mGridParticleIndexUAV;
+
+	// Grid particle key-value pair
+	ID3D11Buffer*                       mGridKeyValuePair;
+	ID3D11ShaderResourceView*           mGridKeyValuePairSRV;
+	ID3D11UnorderedAccessView*          mGridKeyValuePairUAV;
+
+	ID3D11Buffer*                       mGridKeyValuePair_PingPong;
+	ID3D11ShaderResourceView*           mGridKeyValuePairSRV_PingPong;
+	ID3D11UnorderedAccessView*          mGridKeyValuePairUAV_PingPong;
+
 	ID3D11ComputeShader* mParticleRearrangeCS;
 
 	//---------------------------------
@@ -242,7 +268,10 @@ private:
 		UINT numCells;
 
 		XMFLOAT3 cellSize;
+		float padding;
+
 		XMFLOAT3 originPosW;
+		float padding2;
 	};
 	GridBuildConstants mGridBuildConstants;
 	ID3D11Buffer* mGridBuildBuffer;
@@ -253,17 +282,24 @@ private:
 	ID3D11ComputeShader* mParticleForcesCS;
 	struct ParticleForcesConstants
 	{
-		float g_fPressureStiffness;
-		float g_fRestDensity;
-		float g_fSmoothlen;
-		float g_fGradPressureCoef;
-		float g_fLapViscosityCoef;
-		//XMFLOAT3 padding;
+		FLOAT g_fPressureStiffness;
+		FLOAT g_fRestDensity;
+		FLOAT g_fSmoothlen;
+		FLOAT g_fGradPressureCoef;
 
+		FLOAT g_fLapViscosityCoef;
 		XMFLOAT3 originPosW;
+
 		MathHelper::UINT3 gridSize;
+		FLOAT g_fSphereRadius;
+
 		XMFLOAT3 cellSize;
-		XMFLOAT2 padding;
+		float padding3;
+
+		FLOAT g_fParamsSpring = 25.5f;
+		FLOAT g_fParamsDamping = 0.5f;
+		FLOAT g_fParamsShear = 9.1f;
+		FLOAT g_fParamsAttraction = -1.025f;
 	};
 	ParticleForcesConstants mParticleForcesConstants;
 	ID3D11Buffer* mParticleForcesBuffer;
@@ -276,15 +312,36 @@ private:
 	{
 		float g_fSmoothlen;
 		float g_fDensityCoef;
-		//XMFLOAT2 padding;
+		XMFLOAT2 padding;
 
 		XMFLOAT3 originPosW;
+		float padding2;
+
 		MathHelper::UINT3 gridSize;
+		float padding3;
+
 		XMFLOAT3 cellSize;
-		float padding;
+		float padding4;
 	};
 	ParticleDensityConstants mParticleDensityConstants;
 	ID3D11Buffer* mParticleDensityBuffer;
+
+	//---------------------------------
+	// Grid indices clear shader
+	//---------------------------------
+	ID3D11ComputeShader* mGridIndicesClearCS;
+
+	//---------------------------------
+	// Grid indices build shader
+	//---------------------------------
+	ID3D11ComputeShader* mGridIndicesBuildCS;
+	struct GridIndicesBuildConstants
+	{
+		UINT g_iNumElements;
+		XMFLOAT3 padding;
+	};
+	GridIndicesBuildConstants mGridIndicesBuildConstants;
+	ID3D11Buffer* mGridIndicesBuildBuffer;
 };
 
 #endif

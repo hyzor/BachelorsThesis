@@ -12,7 +12,7 @@ int3 CalcGridPos(float3 posW, float3 originPosW, float3 cellSize)
 
 uint CalcGridHash(int3 gridPos, uint3 gridSize)
 {
-	// Grid size has to be the power of 2
+	// Assume grid size is the power of 2
 	gridPos.x = gridPos.x & (gridSize.x - 1);
 	gridPos.y = gridPos.y & (gridSize.y - 1);
 	gridPos.z = gridPos.z & (gridSize.z - 1);
@@ -38,7 +38,7 @@ unsigned int GridConstructKeyValuePair(uint hash, uint value)
 {
 	// Bit pack [----HASH----][-----VALUE------]
 	//              16-bit        16-bit
-	return dot(uint2(hash, value), uint2(16777216, 1)); // 256 * 256 * 256
+	return dot(uint2(hash, value), uint2(65536, 1)); // 256 * 256
 }
 
 unsigned int GridGetKey(unsigned int keyvaluepair)
@@ -48,5 +48,5 @@ unsigned int GridGetKey(unsigned int keyvaluepair)
 
 unsigned int GridGetValue(unsigned int keyvaluepair)
 {
-	return (keyvaluepair & 0xFFFFFF); // (256 * 256 * 256) - 1
+	return (keyvaluepair & 0xFFFF); // (256 * 256 ) - 1
 }

@@ -222,6 +222,12 @@ SphereParticleSystem::SphereParticleSystem()
 
 	ZeroMemory(&mFluidBehaviorProperties, sizeof(mFluidBehaviorProperties));
 	mMaxAllowableTimeStep = 0.005f;
+
+	mGridIndicesClearCS = nullptr;
+
+	ZeroMemory(&mGridIndicesBuildConstants, sizeof(mGridIndicesBuildConstants));
+	mGridIndicesBuildCS = nullptr;
+	mGridIndicesBuildBuffer = nullptr;
 }
 
 SphereParticleSystem::~SphereParticleSystem()
@@ -261,6 +267,24 @@ SphereParticleSystem::~SphereParticleSystem()
 
 	ReleaseCOM(mParticleDensityBuffer);
 	ReleaseCOM(mParticleForcesBuffer);
+
+	ReleaseCOM(mGridParticleHash);
+	ReleaseCOM(mGridParticleHashSRV);
+	ReleaseCOM(mGridParticleHashUAV);
+
+	ReleaseCOM(mGridParticleIndex);
+	ReleaseCOM(mGridParticleIndexSRV);
+	ReleaseCOM(mGridParticleIndexUAV);
+
+	ReleaseCOM(mGridKeyValuePair);
+	ReleaseCOM(mGridKeyValuePairSRV);
+	ReleaseCOM(mGridKeyValuePairUAV);
+
+	ReleaseCOM(mGridKeyValuePair_PingPong);
+	ReleaseCOM(mGridKeyValuePairSRV_PingPong);
+	ReleaseCOM(mGridKeyValuePairUAV_PingPong);
+
+	ReleaseCOM(mGridIndicesBuildBuffer);
 }
 
 bool SphereParticleSystem::Init(ID3D11Device* device, float sphereRadius, int numSphereSlices, int numSphereStacks, UINT maxParticles)
@@ -342,21 +366,11 @@ void SphereParticleSystem::Init(ID3D11Device* device, ID3D11ComputeShader* compu
 	mParticleSRV = particleSRV;
 }
 
-void SphereParticleSystem::Init(ID3D11Device* device, ID3D11ComputeShader* computeShader, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> particleSRV,
-	float sphereRadius, int numSphereSlices, int numSphereStacks, UINT maxParticles,
-	BitonicSortShader* sortShader, MatrixTransposeShader* transposeShader, GridIndicesShader* gridIndicesShader,
-	ID3D11ComputeShader* particleRearrangeShader, ID3D11ComputeShader* gridBuildShader,
-	ID3D11ComputeShader* particleForcesShader, ID3D11ComputeShader* particleDensityShader)
-{
-	Init(device, computeShader, particleSRV, sphereRadius, numSphereSlices, numSphereStacks, maxParticles);
-	mSortShader = sortShader;
-	mTransposeShader = transposeShader;
-	mGridIndicesShader = gridIndicesShader;
-	mParticleRearrangeCS = particleRearrangeShader;
-	mGridBuildCS = gridBuildShader;
-	mParticleForcesCS = particleForcesShader;
-	mParticleDensityCS = particleDensityShader;
-}
+// void SphereParticleSystem::Init(ID3D11Device* device, ID3D11ComputeShader* computeShader, Microsoft::WRL::ComPtr<ID3D11ShaderResourceView> particleSRV,
+// 	float sphereRadius, int numSphereSlices, int numSphereStacks, UINT maxParticles)
+// {
+// 	Init(device, computeShader, particleSRV, sphereRadius, numSphereSlices, numSphereStacks, maxParticles);
+// }
 
 bool SphereParticleSystem::CreateParticles(ID3D11Device* device, ID3D11DeviceContext* dc, UINT numParticles)
 {
@@ -368,9 +382,9 @@ bool SphereParticleSystem::CreateParticles(ID3D11Device* device, ID3D11DeviceCon
 
 		float rndX, rndY, rndZ;
 		std::tr1::mt19937 eng;
-		std::tr1::uniform_real_distribution<float> dist(-50.0f, 50.0f);
+		std::tr1::uniform_real_distribution<float> dist(-GRID_SIZE, GRID_SIZE);
 
-		float velRange = 100.0f;
+		float velRange = GRID_SIZE * 0.5f;
 
 		for (UINT i = 0; i < numParticles; ++i)
 		{
@@ -378,13 +392,14 @@ bool SphereParticleSystem::CreateParticles(ID3D11Device* device, ID3D11DeviceCon
 			rndY = dist(eng);
 			rndZ = dist(eng);
 
-// 			float velX = ((float(rand()) / float(RAND_MAX)) * (velRange - (-velRange))) + (-velRange);
-// 			float velY = ((float(rand()) / float(RAND_MAX)) * (velRange - (-velRange))) + (-velRange);
-// 			float velZ = ((float(rand()) / float(RAND_MAX)) * (velRange - (-velRange))) + (-velRange);
+ 			float velX = ((float(rand()) / float(RAND_MAX)) * (velRange - (-velRange))) + (-velRange);
+ 			float velY = ((float(rand()) / float(RAND_MAX)) * (velRange - (-velRange))) + (-velRange);
+ 			float velZ = ((float(rand()) / float(RAND_MAX)) * (velRange - (-velRange))) + (-velRange);
 
-			particles[i].SetPosition(rndX, rndY, rndZ);
+			particles[i].SetPosition(velX, velY, velZ);
 			//particles[i].SetVelocity(velX, velY, velZ);
-			particles[i].SetVelocity(rndX, rndY, rndZ);
+			particles[i].SetVelocity(velX, velY, velZ);
+			//particles[i].SetVelocity(0.0f, 0.0f, 0.0f);
 			//particles[i].SetRadius(mSphere->radius);
 		}
 
@@ -414,62 +429,24 @@ bool SphereParticleSystem::CreateParticles(ID3D11Device* device, ID3D11DeviceCon
 		if (FAILED(CreateStructuredBuffer<UINT>(device, numParticles, &mGridPingPongBuffer, &mGridPingPongSRV, &mGridPingPongUAV)))
 			return false;
 
+		// Create grid particle hash
+		if (FAILED(CreateStructuredBuffer<UINT>(device, numParticles, &mGridParticleHash, &mGridParticleHashSRV, &mGridParticleHashUAV)))
+			return false;
+
+		// Create grid particle id
+		if (FAILED(CreateStructuredBuffer<UINT>(device, numParticles, &mGridParticleIndex, &mGridParticleIndexSRV, &mGridParticleIndexUAV)))
+			return false;
+
 		// Create grid indices buffer
 		if (FAILED(CreateStructuredBuffer<MathHelper::UINT2>(device, GRID_NUM_INDICES, &mGridIndicesBuffer, &mGridIndicesSRV, &mGridIndicesUAV)))
 			return false;
 
-		mGridIndicesShader->SetNumElements(dc, numParticles);
-
-		/*
-		// Create compute shader input buffer
-		D3D11_BUFFER_DESC bufferDesc;
-		ZeroMemory(&bufferDesc, sizeof(bufferDesc));
-		bufferDesc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
-		bufferDesc.ByteWidth = sizeof(SphereParticle) * numParticles;
-		bufferDesc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
-		bufferDesc.StructureByteStride = sizeof(SphereParticle);
-		bufferDesc.Usage = D3D11_USAGE_DEFAULT;
-
-		D3D11_SUBRESOURCE_DATA data;
-		ZeroMemory(&data, sizeof(data));
-		data.pSysMem = particles;
-
-		if (FAILED(device->CreateBuffer(&bufferDesc, &data, &mParticleBuffer)))
-		{
-			MessageBox(nullptr, L"Could not create source particle buffer for compute shaders!", L"Error", 0);
+		// Create grid key value pair
+		if (FAILED(CreateStructuredBuffer<MathHelper::UINT2>(device, numParticles, &mGridKeyValuePair, &mGridKeyValuePairSRV, &mGridKeyValuePairUAV)))
 			return false;
-		}
 
-		ZeroMemory(&bufferDesc, sizeof(bufferDesc));
-		mParticleBuffer->GetDesc(&bufferDesc);
-
-		D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-		ZeroMemory(&srvDesc, sizeof(srvDesc));
-		srvDesc.ViewDimension = D3D11_SRV_DIMENSION_BUFFER;
-		srvDesc.Buffer.FirstElement = 0;
-		srvDesc.Format = DXGI_FORMAT_UNKNOWN;
-		srvDesc.Buffer.NumElements = numParticles;
-
-		if (FAILED(device->CreateShaderResourceView(mParticleBuffer, &srvDesc, &mParticleBufferView)))
-		{
-			MessageBox(nullptr, L"Could not create source particle buffer view for compute shaders!", L"Error", 0);
+		if (FAILED(CreateStructuredBuffer<MathHelper::UINT2>(device, numParticles, &mGridKeyValuePair_PingPong, &mGridKeyValuePairSRV_PingPong, &mGridKeyValuePairUAV_PingPong)))
 			return false;
-		}
-
-		D3D11_UNORDERED_ACCESS_VIEW_DESC uavDesc;
-		ZeroMemory(&uavDesc, sizeof(uavDesc));
-		uavDesc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
-		uavDesc.Buffer.Flags = 0;
-		uavDesc.Buffer.FirstElement = 0;
-		uavDesc.Format = DXGI_FORMAT_UNKNOWN;
-		uavDesc.Buffer.NumElements = numParticles;
-
-		if (FAILED(device->CreateUnorderedAccessView(mParticleBuffer, &uavDesc, &mParticleBufferUAV)))
-		{
-			MessageBox(nullptr, L"Could not create source particle buffer UAV for compute shaders!", L"Error", 0);
-			return false;
-		}
-		*/
 
 		delete[] particles;
 		
@@ -487,7 +464,7 @@ bool SphereParticleSystem::CreateParticles(ID3D11Device* device, ID3D11DeviceCon
 // 		mConstantVariables.cellSize = mSphere->radius * 2.0f;
 // 		mConstantVariables.originPosW = XMFLOAT3(0.0f, 0.0f, 0.0f);
 		mConstantVariables.gravity = MathHelper::GetGravityConstant();
-		mConstantVariables.boundaries.x = mConstantVariables.boundaries.y = mConstantVariables.boundaries.z = 200.0f;
+		mConstantVariables.boundaries.x = mConstantVariables.boundaries.y = mConstantVariables.boundaries.z = GRID_SIZE;
 		IShader::UpdateBuffer(dc, mConstantsBuffer, &mConstantVariables);
 
 		if (FAILED(IShader::CreateBuffer(device, &mPerFrameBuffer, &mPerFrameVariables)))
@@ -501,8 +478,10 @@ bool SphereParticleSystem::CreateParticles(ID3D11Device* device, ID3D11DeviceCon
 			return false;
 
 		float cellSize = mParticleRadius * 2.0f;
+
+		// Grid properties
 		mGridBuildConstants.cellSize.x = mGridBuildConstants.cellSize.y = mGridBuildConstants.cellSize.z = cellSize;
-		mGridBuildConstants.gridSize.x = mGridBuildConstants.gridSize.y = mGridBuildConstants.gridSize.z = 12;
+		mGridBuildConstants.gridSize.x = mGridBuildConstants.gridSize.y = mGridBuildConstants.gridSize.z = GRID_SIZE;
 		mGridBuildConstants.numCells = mGridBuildConstants.gridSize.x * mGridBuildConstants.gridSize.y * mGridBuildConstants.gridSize.z;
 		mGridBuildConstants.originPosW = XMFLOAT3(0.0f, 0.0f, 0.0f);
 		IShader::UpdateBuffer(dc, mGridBuildBuffer, &mGridBuildConstants);
@@ -511,14 +490,39 @@ bool SphereParticleSystem::CreateParticles(ID3D11Device* device, ID3D11DeviceCon
 		if (FAILED(IShader::CreateBuffer(device, &mParticleForcesBuffer, &mParticleForcesConstants)))
 			return false;
 
+		// SPH method parameters
 		mParticleForcesConstants.g_fGradPressureCoef = mFluidBehaviorProperties.ParticleMass * -45.0f / (XM_PI * pow(mFluidBehaviorProperties.Smoothlen, 6));
 		mParticleForcesConstants.g_fLapViscosityCoef = mFluidBehaviorProperties.ParticleMass * mFluidBehaviorProperties.Viscosity * 45.0f / (XM_PI * pow(mFluidBehaviorProperties.Smoothlen, 6));
 		mParticleForcesConstants.g_fPressureStiffness = mFluidBehaviorProperties.PressureStiffness;
 		mParticleForcesConstants.g_fRestDensity = mFluidBehaviorProperties.RestDensity;
 		mParticleForcesConstants.g_fSmoothlen = mFluidBehaviorProperties.Smoothlen;
+
+		// Grid properties
 		mParticleForcesConstants.cellSize = mGridBuildConstants.cellSize;
 		mParticleForcesConstants.gridSize = mGridBuildConstants.gridSize;
 		mParticleForcesConstants.originPosW = mGridBuildConstants.originPosW;
+
+		mParticleForcesConstants.g_fSphereRadius = mParticleRadius;
+
+		// DEM method parameters (Parameters varying depending on grid size and particle numbers)
+		// Good for ~64k particles @ 64x64x64 grid
+		mParticleForcesConstants.g_fParamsSpring = 25.5f;
+		mParticleForcesConstants.g_fParamsDamping = 0.5f;
+		mParticleForcesConstants.g_fParamsShear = 9.1f;
+		mParticleForcesConstants.g_fParamsAttraction = -1.025f;
+
+		// OK (Runnable) for ~512k particles @ 64x64x64 grid
+		//mParticleForcesConstants.g_fParamsSpring = 5.5f;
+		//mParticleForcesConstants.g_fParamsDamping = 0.5f;
+		//mParticleForcesConstants.g_fParamsShear = 1.1f;
+		//mParticleForcesConstants.g_fParamsAttraction = -1.025f;
+
+		// OK (Runnable) for ~1024k particles @ 64x64x64 grid
+		//mParticleForcesConstants.g_fParamsSpring = 1.5f;
+		//mParticleForcesConstants.g_fParamsDamping = 0.5f;
+		//mParticleForcesConstants.g_fParamsShear = 0.25f;
+		//mParticleForcesConstants.g_fParamsAttraction = -0.45f;
+
 		IShader::UpdateBuffer(dc, mParticleForcesBuffer, &mParticleForcesConstants);
 
 		// Particle density shader buffer
@@ -531,6 +535,12 @@ bool SphereParticleSystem::CreateParticles(ID3D11Device* device, ID3D11DeviceCon
 		mParticleDensityConstants.gridSize = mGridBuildConstants.gridSize;
 		mParticleDensityConstants.originPosW = mGridBuildConstants.originPosW;
 		IShader::UpdateBuffer(dc, mParticleDensityBuffer, &mParticleDensityConstants);
+
+		if (FAILED(IShader::CreateBuffer(device, &mGridIndicesBuffer, &mGridIndicesBuildConstants)))
+			return false;
+
+		mGridIndicesBuildConstants.g_iNumElements = numParticles;
+		IShader::UpdateBuffer(dc, mGridIndicesBuffer, &mGridIndicesBuildConstants);
 
 		return true;
 	}
@@ -566,15 +576,23 @@ void SphereParticleSystem::Update(ID3D11DeviceContext* dc, double time, float dt
 	ID3D11ShaderResourceView* nullSRV = nullptr;
 
 	//------------------------------------------------------------
+	// Clear grid indices
+	//------------------------------------------------------------
+	// First clear the grid indices
+	dc->CSSetShader(mGridIndicesClearCS, nullptr, 0);
+	dc->CSSetUnorderedAccessViews(0, 1, &mGridIndicesUAV, &UAVInitialCounts);
+	dc->Dispatch(GRID_NUM_INDICES / BLOCKSIZE, 1, 1);
+	dc->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
+
+	//------------------------------------------------------------
 	// Build the grid
 	//------------------------------------------------------------
 	dc->CSSetShader(mGridBuildCS, nullptr, 0);
 	dc->CSSetConstantBuffers(0, 1, &mGridBuildBuffer);
-	dc->CSSetUnorderedAccessViews(0, 1, &mGridUAV, &UAVInitialCounts);
+	dc->CSSetUnorderedAccessViews(0, 1, &mGridKeyValuePairUAV, &UAVInitialCounts);
 	dc->CSSetShaderResources(0, 1, &mParticleBufferView);
 
 	dc->Dispatch(mNumParticles / BLOCKSIZE, 1, 1);
-	//dc->Dispatch(mNumThreadGroupsX, mNumThreadGroupsY, mNumThreadGroupsZ);
 
 	dc->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
 	dc->CSSetShaderResources(0, 1, &nullSRV);
@@ -582,13 +600,21 @@ void SphereParticleSystem::Update(ID3D11DeviceContext* dc, double time, float dt
 	//------------------------------------------------------------
 	// Sort the grid
 	//------------------------------------------------------------
-	GPUSort(dc, mGridUAV, mGridSRV, mGridPingPongUAV, mGridPingPongSRV);
+	// We sort the grid key-value uint pair by their keys so that the particles with the same cell hash are adjacent to each other
+	GPUSort(dc, mGridKeyValuePairUAV, mGridKeyValuePairSRV, mGridKeyValuePairUAV_PingPong, mGridKeyValuePairSRV_PingPong);
 
 	//------------------------------------------------------------
-	// Build the grid indices
+	// Build grid indices
 	//------------------------------------------------------------
-	mGridIndicesShader->ClearGridIndices(dc, mGridIndicesUAV, GRID_NUM_INDICES / BLOCKSIZE, 1, 1);
-	mGridIndicesShader->BuildGridIndices(dc, mGridIndicesUAV, mGridSRV, mNumParticles / BLOCKSIZE, 1, 1);
+	dc->CSSetShader(mGridIndicesBuildCS, nullptr, 0);
+	dc->CSSetUnorderedAccessViews(0, 1, &mGridIndicesUAV, &UAVInitialCounts);
+	dc->CSSetConstantBuffers(0, 1, &mGridIndicesBuffer);
+	dc->CSSetShaderResources(0, 1, &mGridKeyValuePairSRV);
+
+	dc->Dispatch(mNumParticles / BLOCKSIZE, 1, 1);
+
+	dc->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
+	dc->CSSetShaderResources(0, 1, &nullSRV);
 
 	//------------------------------------------------------------
 	// Rearrange particles
@@ -596,7 +622,7 @@ void SphereParticleSystem::Update(ID3D11DeviceContext* dc, double time, float dt
 	dc->CSSetShader(mParticleRearrangeCS, nullptr, 0);
 	dc->CSSetUnorderedAccessViews(0, 1, &mSortedParticlesUAV, &UAVInitialCounts); // New sorted particle array
 	dc->CSSetShaderResources(0, 1, &mParticleBufferView); // Old unsorted particle array
-	dc->CSSetShaderResources(1, 1, &mGridSRV);
+	dc->CSSetShaderResources(1, 1, &mGridKeyValuePairSRV);
 
 	dc->Dispatch(mNumParticles / BLOCKSIZE, 1, 1);
 
@@ -607,16 +633,17 @@ void SphereParticleSystem::Update(ID3D11DeviceContext* dc, double time, float dt
 	//------------------------------------------------------------
 	// Calculate densities
 	//------------------------------------------------------------
-	dc->CSSetShader(mParticleDensityCS, nullptr, 0); 
-	dc->CSSetShaderResources(0, 1, &mSortedParticlesSRV);
-	dc->CSSetUnorderedAccessViews(0, 1, &mParticleDensityUAV, &UAVInitialCounts);
-	dc->CSSetShaderResources(1, 1, &mGridIndicesSRV);
-
-	dc->Dispatch(mNumParticles / BLOCKSIZE, 1, 1);
-
-	dc->CSSetShaderResources(0, 1, &nullSRV);
-	dc->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
-	dc->CSSetShaderResources(1, 1, &nullSRV);
+// 	dc->CSSetShader(mParticleDensityCS, nullptr, 0);
+// 	dc->CSSetShaderResources(0, 1, &mSortedParticlesSRV);
+// 	dc->CSSetUnorderedAccessViews(0, 1, &mParticleDensityUAV, &UAVInitialCounts);
+// 	dc->CSSetShaderResources(1, 1, &mGridIndicesSRV);
+// 	dc->CSSetConstantBuffers(0, 1, &mParticleDensityBuffer);
+// 
+// 	dc->Dispatch(mNumParticles / BLOCKSIZE, 1, 1);
+// 
+// 	dc->CSSetShaderResources(0, 1, &nullSRV);
+// 	dc->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
+// 	dc->CSSetShaderResources(1, 1, &nullSRV);
 
 	//------------------------------------------------------------
 	// Calculate forces
@@ -626,6 +653,7 @@ void SphereParticleSystem::Update(ID3D11DeviceContext* dc, double time, float dt
 	dc->CSSetShaderResources(1, 1, &mParticleDensitySRV);
 	dc->CSSetUnorderedAccessViews(0, 1, &mParticleForcesUAV, &UAVInitialCounts);
 	dc->CSSetShaderResources(2, 1, &mGridIndicesSRV);
+	dc->CSSetConstantBuffers(0, 1, &mParticleForcesBuffer);
 
 	dc->Dispatch(mNumParticles / BLOCKSIZE, 1, 1);
 
@@ -645,11 +673,12 @@ void SphereParticleSystem::Update(ID3D11DeviceContext* dc, double time, float dt
 	dc->CSSetConstantBuffers(1, 1, &mPerFrameBuffer);
 	dc->CSSetUnorderedAccessViews(0, 1, &mParticleBufferUAV, &UAVInitialCounts);
 	dc->CSSetShaderResources(0, 1, &mSortedParticlesSRV);
+	//dc->CSSetShaderResources(0, 1, &mParticleBufferView);
 	dc->CSSetShaderResources(1, 1, &mParticleForcesSRV);
 	//dc->CSSetUnorderedAccessViews(1, 1, &mGridUAV, &UAVInitialCounts);
 
-	dc->Dispatch(mNumThreadGroupsX, mNumThreadGroupsY, mNumThreadGroupsZ);
-	//dc->Dispatch(mNumParticles / BLOCKSIZE, 1, 1);
+	//dc->Dispatch(mNumThreadGroupsX, mNumThreadGroupsY, mNumThreadGroupsZ);
+	dc->Dispatch(mNumParticles / BLOCKSIZE, 1, 1);
 
 	dc->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
 	dc->CSSetShaderResources(0, 1, &nullSRV);
@@ -657,9 +686,9 @@ void SphereParticleSystem::Update(ID3D11DeviceContext* dc, double time, float dt
 	//dc->CSSetUnorderedAccessViews(1, 1, &nullUAV, &UAVInitialCounts);
 
 	// Clean-up
-	dc->CSSetShader(nullptr, nullptr, 0);
-	for (int i = 0; i < 8; ++i)
-		dc->CSSetUnorderedAccessViews(i, 1, &nullUAV, nullptr);
+// 	dc->CSSetShader(nullptr, nullptr, 0);
+// 	for (int i = 0; i < 8; ++i)
+// 		dc->CSSetUnorderedAccessViews(i, 1, &nullUAV, nullptr);
 
 	// Now we can proceed to draw the particles using the particle buffer SRV as source in the vertex shader
 }
@@ -722,7 +751,11 @@ void SphereParticleSystem::GPUSort(ID3D11DeviceContext* pd3dImmediateContext,
 		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &inUAV, &UAVInitialCounts);
 		//pd3dImmediateContext->CSSetShader(g_pSortBitonic, nullptr, 0);
 		pd3dImmediateContext->Dispatch(NUM_ELEMENTS / BITONIC_BLOCK_SIZE, 1, 1);
+		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
 	}
+
+	UINT UAVInitialCounts = 0;
+	pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
 
 	// Then sort the rows and columns for the levels > than the block size
 	// Transpose. Sort the Columns. Transpose. Sort the Rows.
@@ -735,39 +768,52 @@ void SphereParticleSystem::GPUSort(ID3D11DeviceContext* pd3dImmediateContext,
 		mTransposeShader->UpdatePerFrame(pd3dImmediateContext);
 
 		// Transpose the data from buffer 1 into buffer 2
-		ID3D11ShaderResourceView* pViewNULL = nullptr;
 		UINT UAVInitialCounts = 0;
-		pd3dImmediateContext->CSSetShaderResources(0, 1, &pViewNULL);
 		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &tempUAV, &UAVInitialCounts);
 		pd3dImmediateContext->CSSetShaderResources(0, 1, &inSRV);
 		//pd3dImmediateContext->CSSetShader(g_pSortTranspose, nullptr, 0);
 		pd3dImmediateContext->Dispatch(MATRIX_WIDTH / TRANSPOSE_BLOCK_SIZE, MATRIX_HEIGHT / TRANSPOSE_BLOCK_SIZE, 1);
+		pd3dImmediateContext->CSSetShaderResources(0, 1, &nullSRV);
+		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
 
 		// Sort the transposed column data
 		//pd3dImmediateContext->CSSetShader(g_pSortBitonic, nullptr, 0);
 		mSortShader->SetActive(pd3dImmediateContext);
-		mSortShader->SetBuffers(pd3dImmediateContext);
+		//mSortShader->SetBuffers(pd3dImmediateContext);
+		mSortShader->SetLevelProperties(level / BITONIC_BLOCK_SIZE, (level & ~NUM_ELEMENTS) / BITONIC_BLOCK_SIZE);
+		mSortShader->UpdatePerFrame(pd3dImmediateContext);
+		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &tempUAV, &UAVInitialCounts);
 		pd3dImmediateContext->Dispatch(NUM_ELEMENTS / BITONIC_BLOCK_SIZE, 1, 1);
+		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
 
 		//SortCB constants2 = { BITONIC_BLOCK_SIZE, level, MATRIX_HEIGHT, MATRIX_WIDTH };
 		//pd3dImmediateContext->UpdateSubresource(g_pSortCB, 0, nullptr, &constants2, 0, 0);
-		mSortShader->SetLevelProperties(BITONIC_BLOCK_SIZE, level);
+		//mSortShader->SetLevelProperties(BITONIC_BLOCK_SIZE, level);
 
 		// Transpose the data from buffer 2 back into buffer 1
 		mTransposeShader->SetActive(pd3dImmediateContext);
-		mTransposeShader->SetBuffers(pd3dImmediateContext);
-		pd3dImmediateContext->CSSetShaderResources(0, 1, &pViewNULL);
+		//mTransposeShader->SetBuffers(pd3dImmediateContext);
+		mTransposeShader->SetMatrixProperties(MATRIX_HEIGHT, MATRIX_WIDTH);
+		mTransposeShader->UpdatePerFrame(pd3dImmediateContext);
 		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &inUAV, &UAVInitialCounts);
 		pd3dImmediateContext->CSSetShaderResources(0, 1, &tempSRV);
 		//pd3dImmediateContext->CSSetShader(g_pSortTranspose, nullptr, 0);
 		pd3dImmediateContext->Dispatch(MATRIX_HEIGHT / TRANSPOSE_BLOCK_SIZE, MATRIX_WIDTH / TRANSPOSE_BLOCK_SIZE, 1);
+		pd3dImmediateContext->CSSetShaderResources(0, 1, &nullSRV);
+		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
 
 		// Sort the row data
 		//pd3dImmediateContext->CSSetShader(g_pSortBitonic, nullptr, 0);
 		mSortShader->SetActive(pd3dImmediateContext);
+		mSortShader->SetLevelProperties(BITONIC_BLOCK_SIZE, level);
 		mSortShader->UpdatePerFrame(pd3dImmediateContext);
+		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &inUAV, &UAVInitialCounts);
 		pd3dImmediateContext->Dispatch(NUM_ELEMENTS / BITONIC_BLOCK_SIZE, 1, 1);
+		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
 	}
+
+	pd3dImmediateContext->CSSetUnorderedAccessViews(0, 1, &nullUAV, &UAVInitialCounts);
+	pd3dImmediateContext->CSSetShaderResources(0, 1, &nullSRV);
 }
 
 void SphereParticleSystem::SetFluidBehaviorProperties(FLOAT smoothlen, FLOAT pressureStiffnes, FLOAT restDensity, FLOAT particleMass, FLOAT viscosity)
@@ -777,4 +823,19 @@ void SphereParticleSystem::SetFluidBehaviorProperties(FLOAT smoothlen, FLOAT pre
 	mFluidBehaviorProperties.RestDensity = restDensity;
 	mFluidBehaviorProperties.ParticleMass = particleMass;
 	mFluidBehaviorProperties.Viscosity = viscosity;
+}
+
+void SphereParticleSystem::SetShaders(BitonicSortShader* sortShader, MatrixTransposeShader* transposeShader, ID3D11ComputeShader* particleRearrangeShader,
+	ID3D11ComputeShader* gridBuildShader, ID3D11ComputeShader* particleForcesShader,
+	ID3D11ComputeShader* particleDensityShader, ID3D11ComputeShader* gridIndicesClearShader,
+	ID3D11ComputeShader* gridIndicesBuildShader)
+{
+	mSortShader = sortShader;
+	mTransposeShader = transposeShader;
+	mParticleRearrangeCS = particleRearrangeShader;
+	mGridBuildCS = gridBuildShader;
+	mParticleForcesCS = particleForcesShader;
+	mParticleDensityCS = particleDensityShader;
+	mGridIndicesClearCS = gridIndicesClearShader;
+	mGridIndicesBuildCS = gridIndicesBuildShader;
 }

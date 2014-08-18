@@ -9,7 +9,7 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 //--------------------------------------------------------------------------------------
 
-#define BITONIC_BLOCK_SIZE 512
+#define BITONIC_BLOCK_SIZE 1024
 
 cbuffer cBuffer : register(b0)
 {
@@ -18,9 +18,10 @@ cbuffer cBuffer : register(b0)
 	float2 padding;
 };
 
-RWStructuredBuffer<unsigned int> Data : register(u0);
+StructuredBuffer<uint2> Input : register(t0);
+RWStructuredBuffer<uint2> Data : register(u0);
 
-groupshared unsigned int shared_data[BITONIC_BLOCK_SIZE];
+groupshared uint2 shared_data[BITONIC_BLOCK_SIZE];
 
 [numthreads(BITONIC_BLOCK_SIZE, 1, 1)]
 void main(uint3 Gid : SV_GroupID,
@@ -35,7 +36,9 @@ void main(uint3 Gid : SV_GroupID,
 	// Sort the shared data
 	for (unsigned int j = g_iLevel >> 1; j > 0; j >>= 1)
 	{
-		unsigned int result = ((shared_data[GI & ~j] <= shared_data[GI | j]) == (bool)(g_iLevelMask & DTid.x)) ? shared_data[GI ^ j] : shared_data[GI];
+		uint2 result = ((shared_data[GI & ~j].x <= shared_data[GI | j].x)
+			== (bool)(g_iLevelMask & DTid.x)) ?
+			shared_data[GI ^ j] : shared_data[GI];
 		GroupMemoryBarrierWithGroupSync();
 		shared_data[GI] = result;
 		GroupMemoryBarrierWithGroupSync();

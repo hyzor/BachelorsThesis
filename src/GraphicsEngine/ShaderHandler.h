@@ -464,6 +464,9 @@ public:
 	void ClearGridIndices(ID3D11DeviceContext* dc, ID3D11UnorderedAccessView* gridIndicesUAV,
 		UINT threadGroupCountX, UINT threadGroupCountY, UINT threadGroupCountZ);
 
+	ID3D11ComputeShader* GetClearShader();
+	ID3D11ComputeShader* GetBuildShader();
+
 	void SetNumElements(ID3D11DeviceContext* dc, UINT numElements);
 
 private:
