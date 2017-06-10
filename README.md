@@ -1,3 +1,3 @@
 # BachelorsThesis
 
-This is the source code for my Bachelor's thesis.
+This is the source code of my Bachelor's thesis.
